@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Madalyon Hukuk">
+<meta name="theme-color" content="#1a1a2e">
+<title>Madalyon Hukuk - Görev Takip</title>
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%231a1a2e' width='100' height='100' rx='20'/><text x='50' y='65' text-anchor='middle' font-size='50'>⚖️</text></svg>">
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#F4F5F7;overscroll-behavior:none;-webkit-tap-highlight-color:transparent}
+body.dark{background:#0d0d1a}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.6}}
+input:focus,select:focus,textarea:focus{outline:none;border-color:#C9A96E !important;box-shadow:0 0 0 3px rgba(201,169,110,0.13)}
+button{-webkit-tap-highlight-color:transparent}
+::-webkit-scrollbar{width:0;height:0}
+select{-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2 4l4 4 4-4' fill='none' stroke='%23666' stroke-width='1.5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+// Firebase init
+firebase.initializeApp({databaseURL:"https://madalyon-hukuk-default-rtdb.europe-west1.firebasedatabase.app"});
+const db=firebase.database();
+const dataRef=db.ref("madalyon-data");
+
+// Constants
+const OFFICE="MADALYON HUKUK DANIŞMANLIK";
+const TEAM=[
+  {id:"necati",name:"Av. Necati",ini:"N",col:"#1B4D6E"},
+  {id:"batuhan",name:"Av. Batuhan",ini:"B",col:"#2E7D52"},
+  {id:"yunus",name:"Av. Yunus",ini:"Y",col:"#8B4513"},
+  {id:"talip",name:"Av. Talip",ini:"T",col:"#5C4B8A"}
+];
+const CATS=[
+  {id:"dava",l:"Dava Takibi",i:"⚖️"},{id:"icra",l:"İcra Takibi",i:"📋"},
+  {id:"sozlesme",l:"Sözleşme",i:"📝"},{id:"dilekce",l:"Dilekçe",i:"📄"},
+  {id:"muvekkil",l:"Müvekkil Görüşme",i:"👤"},{id:"idari",l:"İdari İş",i:"🏢"},
+  {id:"diger",l:"Diğer",i:"📌"}
+];
+const PRIS=[
+  {id:"acil",l:"Acil",c:"#C0392B",bg:"#FDEDEC"},
+  {id:"yuksek",l:"Yüksek",c:"#E67E22",bg:"#FEF5E7"},
+  {id:"normal",l:"Normal",c:"#2E86C1",bg:"#EBF5FB"},
+  {id:"dusuk",l:"Düşük",c:"#7F8C8D",bg:"#F2F3F4"}
+];
+const STS=[
+  {id:"bekliyor",l:"Bekliyor",c:"#F39C12",bg:"#FEF9E7",i:"⏳"},
+  {id:"devam",l:"Devam Ediyor",c:"#2E86C1",bg:"#EBF5FB",i:"🔄"},
+  {id:"tamamlandi",l:"Tamamlandı",c:"#27AE60",bg:"#EAFAF1",i:"✅"}
+];
+const QLINKS=[
+  {l:"UETS",url:"https://ptt.etebligat.gov.tr/login",i:"📬",d:"e-Tebligat"},
+  {l:"Celse",url:"https://apps.apple.com/tr/app/celse/id1367444003",i:"⚖️",d:"Duruşma Takip"},
+  {l:"UYAP",url:"https://avukat.uyap.gov.tr",i:"🏛️",d:"Avukat Portal"}
+];
+
+// State
+let state={tasks:[],logs:[],hearings:[],cu:null,theme:"light",view:"list",filter:"all",fAsn:"all",fCat:"all",sortBy:"deadline",sq:"",showFlt:false};
+let modals={showForm:false,editTask:null,showDet:null,showHForm:false,editH:null,dayTasks:null,dayH:null};
+let fd={title:"",description:"",priority:"normal",deadline:"",assignee:"",category:"dava",status:"bekliyor",tebligatDate:""};
+let hf={court:"",fileNo:"",date:"",time:"09:00",assignee:"",notes:""};
+let calMonth=new Date();
+let hCalMonth=new Date();
+let pdfMonth=new Date().getFullYear()+"-"+String(new Date().getMonth()+1).padStart(2,"0");
+
+// Helpers
+function gid(){return Date.now().toString(36)+Math.random().toString(36).substr(2,9)}
+function drem(dl){if(!dl)return null;const n=new Date();n.setHours(0,0,0,0);const d=new Date(dl);d.setHours(0,0,0,0);return Math.ceil((d-n)/864e5)}
+function fdt(d){if(!d)return"";return new Date(d).toLocaleDateString("tr-TR",{day:"numeric",month:"long",year:"numeric"})}
+function fds(d){if(!d)return"";return new Date(d).toLocaleDateString("tr-TR",{day:"numeric",month:"short"})}
+function ftm(d){if(!d)return"";return new Date(d).toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"})}
+function T(){return state.theme==="dark"?{bg:"#0d0d1a",card:"#1a1a2e",cb:"#2a2a42",tx:"#E8E8F0",ts:"#A0A0B8",tm:"#6a6a80",ib:"#12121f",ibd:"#2a2a42",gold:"#C9A96E",fb:"#1a1a2e",fa:"#C9A96E",fat:"#0d0d1a",mb:"#1a1a2e",ct:"#C9A96E",ctt:"#0d0d1a",fab:"linear-gradient(135deg,#C9A96E 0%,#B8944E 100%)",fabc:state.theme==="dark"?"#0d0d1a":"#fff"}:{bg:"#F4F5F7",card:"#fff",cb:"#E8EAED",tx:"#1a1a2e",ts:"#555",tm:"#888",ib:"#FAFBFC",ibd:"#D5D8DC",gold:"#C9A96E",fb:"#E8EAED",fa:"#1a1a2e",fat:"#fff",mb:"#fff",ct:"#1a1a2e",ctt:"#fff",fab:"linear-gradient(135deg,#1a1a2e 0%,#16213e 100%)",fabc:"#fff"}}
+function tm(id){return TEAM.find(m=>m.id===id)}
+
+// Firebase sync
+function saveData(){
+  dataRef.set({tasks:state.tasks,logs:state.logs,hearings:state.hearings});
+}
+dataRef.on("value",snap=>{
+  const d=snap.val();
+  if(d){
+    state.tasks=d.tasks||[];
+    state.logs=d.logs||[];
+    state.hearings=d.hearings||[];
+    render();
+  }
+});
+
+// ICS export
+function exportICS(h){
+  const s=new Date(h.date+"T"+(h.time||"09:00"));const e=new Date(s.getTime()+3600000);
+  const fmt=d=>d.toISOString().replace(/[-:]/g,"").replace(/\.\d{3}/,"");
+  const m=tm(h.assignee);
+  const ics="BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\nDTSTART:"+fmt(s)+"\nDTEND:"+fmt(e)+"\nSUMMARY:Duruşma - "+h.court+"\nDESCRIPTION:Dosya: "+h.fileNo+"\\nAvukat: "+(m?m.name:"-")+"\nLOCATION:"+h.court+"\nEND:VEVENT\nEND:VCALENDAR";
+  const blob=new Blob([ics],{type:"text/calendar"});const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");a.href=url;a.download="durusma.ics";a.click();URL.revokeObjectURL(url);
+}
+
+// PDF exports
+function exportTasksPDF(tasks){
+  const now=fdt(new Date().toISOString());let rows="";
+  tasks.forEach((t,i)=>{const pr=PRIS.find(p=>p.id===t.priority);const st=STS.find(s=>s.id===t.status);const cat=CATS.find(c=>c.id===t.category);const m=tm(t.assignee);const days=drem(t.deadline);let dc="",dt="-";
+  if(t.status==="tamamlandi")dt="Tamamlandı";else if(days!==null){if(days<0){dc="color:#C0392B;font-weight:700";dt=Math.abs(days)+" gün gecikmiş";}else if(days===0){dc="color:#C0392B;font-weight:700";dt="BUGÜN";}else if(days<=3){dc="color:#E67E22;font-weight:600";dt=days+" gün";}else{dc="color:#27AE60";dt=days+" gün";}}
+  rows+="<tr"+(i%2?" style='background:#fafbfc'":"")+'><td>'+(i+1)+'</td><td><b>'+t.title+'</b></td><td>'+(cat?cat.l:"-")+'</td><td style="color:'+(pr?pr.c:"#333")+';font-weight:600">'+(pr?pr.l:"-")+'</td><td>'+(m?m.name:"-")+'</td><td>'+(fdt(t.deadline)||"-")+'</td><td style="'+dc+'">'+dt+'</td><td style="color:'+(st?st.c:"#333")+'">'+(st?st.l:"-")+"</td></tr>";});
+  const html="<!DOCTYPE html><html><head><meta charset='utf-8'><style>@page{margin:18mm 14mm;size:A4}*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Segoe UI',Arial,sans-serif;color:#222;font-size:11px;line-height:1.5}.h{text-align:center;border-bottom:3px double #1a1a2e;padding-bottom:14px;margin-bottom:18px}.h h1{font-size:18px;color:#1a1a2e;letter-spacing:3px}.h p{font-size:11px;color:#666;margin-top:4px}table{width:100%;border-collapse:collapse}th{background:#1a1a2e;color:#fff;padding:7px 8px;text-align:left;font-size:10px;text-transform:uppercase}td{padding:7px 8px;border-bottom:1px solid #e8e8e8;font-size:10.5px;vertical-align:top}.f{margin-top:20px;text-align:center;font-size:9px;color:#999;border-top:1px solid #ddd;padding-top:10px}</style></head><body><div class='h'><h1>"+OFFICE+"</h1><p>Görev Raporu - "+now+"</p></div><table><thead><tr><th>#</th><th>Görev</th><th>Kategori</th><th>Öncelik</th><th>Atanan</th><th>Son Tarih</th><th>Kalan</th><th>Durum</th></tr></thead><tbody>"+rows+"</tbody></table><div class='f'>"+OFFICE+" - Otomatik rapor</div></body></html>";
+  const w=window.open("","_blank");if(w){w.document.write(html);w.document.close();setTimeout(()=>w.print(),500);}
+}
+
+function exportHearingsPDF(year,month){
+  const mn=new Date(year,month).toLocaleDateString("tr-TR",{month:"long",year:"numeric"});
+  const fil=state.hearings.filter(h=>{if(!h.date)return false;const d=new Date(h.date);return d.getFullYear()===year&&d.getMonth()===month;}).sort((a,b)=>new Date(a.date+"T"+(a.time||"00:00"))-new Date(b.date+"T"+(b.time||"00:00")));
+  let rows="";fil.forEach((h,i)=>{const m=tm(h.assignee);const cr=tm(h.createdBy);const days=drem(h.date);let dt="-",ds="";
+  if(days!==null){if(days<0){dt="Geçti";ds="color:#27AE60";}else if(days===0){dt="BUGÜN";ds="color:#E74C3C;font-weight:700";}else{dt=days+" gün";ds=days<=3?"color:#E67E22;font-weight:600":"color:#27AE60";}}
+  rows+="<tr"+(i%2?" style='background:#fafbfc'":"")+'><td>'+(i+1)+'</td><td><b>'+h.court+'</b></td><td>'+h.fileNo+'</td><td>'+fdt(h.date)+'</td><td>'+(h.time||"09:00")+'</td><td>'+(m?m.name:"-")+'</td><td style="'+ds+'">'+dt+'</td><td style="font-size:9px;color:#888">'+(cr?cr.name:"-")+"</td></tr>";});
+  const html="<!DOCTYPE html><html><head><meta charset='utf-8'><style>@page{margin:18mm 14mm;size:A4 landscape}*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Segoe UI',Arial,sans-serif;color:#222;font-size:11px;line-height:1.5}.h{text-align:center;border-bottom:3px double #1a1a2e;padding-bottom:14px;margin-bottom:18px}.h h1{font-size:18px;color:#1a1a2e;letter-spacing:3px}.h p{font-size:12px;color:#666;margin-top:4px}.h .mn{font-size:15px;color:#1a1a2e;font-weight:700;margin-top:6px;text-transform:capitalize}table{width:100%;border-collapse:collapse}th{background:#1a1a2e;color:#fff;padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase}td{padding:8px 10px;border-bottom:1px solid #e8e8e8;font-size:11px;vertical-align:top}.f{margin-top:20px;text-align:center;font-size:9px;color:#999;border-top:1px solid #ddd;padding-top:10px}.empty{text-align:center;padding:40px;color:#999}</style></head><body><div class='h'><h1>"+OFFICE+"</h1><p>Duruşma Takvimi</p><div class='mn'>"+mn+"</div></div>"+(fil.length?"<table><thead><tr><th>#</th><th>Mahkeme</th><th>Dosya No</th><th>Tarih</th><th>Saat</th><th>Avukat</th><th>Durum</th><th>Ekleyen</th></tr></thead><tbody>"+rows+"</tbody></table>":"<div class='empty'>Bu ay için duruşma yok.</div>")+"<div class='f'>"+OFFICE+" - Duruşma Raporu</div></body></html>";
+  const w=window.open("","_blank");if(w){w.document.write(html);w.document.close();setTimeout(()=>w.print(),500);}
+}
+
+function genWeekly(){
+  const now=new Date();const wa=new Date(now);wa.setDate(wa.getDate()-7);
+  const cr=state.tasks.filter(t=>t.createdAt&&new Date(t.createdAt)>=wa);
+  const co=state.tasks.filter(t=>t.completedAt&&new Date(t.completedAt)>=wa);
+  const od=state.tasks.filter(t=>t.status!=="tamamlandi"&&t.deadline&&drem(t.deadline)<0);
+  let mr="";TEAM.forEach(m=>{const d={tot:state.tasks.filter(t=>t.assignee===m.id&&t.status!=="tamamlandi").length,cw:co.filter(t=>t.assignee===m.id).length,od:od.filter(t=>t.assignee===m.id).length};mr+="<tr><td><b>"+m.name+"</b></td><td>"+d.tot+"</td><td>"+d.cw+"</td><td"+(d.od>0?" style='color:#C0392B;font-weight:700'":"")+">"+d.od+"</td></tr>";});
+  const html="<!DOCTYPE html><html><head><meta charset='utf-8'><style>@page{margin:18mm 14mm;size:A4}*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Segoe UI',Arial,sans-serif;color:#222;font-size:11px;line-height:1.6}.h{text-align:center;border-bottom:3px double #1a1a2e;padding-bottom:14px;margin-bottom:20px}.h h1{font-size:18px;color:#1a1a2e;letter-spacing:3px}h2{font-size:14px;color:#1a1a2e;margin:18px 0 8px;border-bottom:1px solid #ddd;padding-bottom:6px}.st{display:flex;gap:16px;justify-content:center;margin-bottom:18px}.sb{text-align:center;background:#f7f8fa;padding:12px 20px;border-radius:8px}.sn{font-size:24px;font-weight:700;color:#1a1a2e}.sl{font-size:9px;color:#888;text-transform:uppercase}table{width:100%;border-collapse:collapse;margin-bottom:12px}th{background:#1a1a2e;color:#fff;padding:7px 10px;text-align:left;font-size:10px;text-transform:uppercase}td{padding:7px 10px;border-bottom:1px solid #e8e8e8;font-size:11px}.f{margin-top:24px;text-align:center;font-size:9px;color:#999;border-top:1px solid #ddd;padding-top:10px}</style></head><body><div class='h'><h1>"+OFFICE+"</h1><p>Haftalık Özet</p></div><div class='st'><div class='sb'><div class='sn'>"+cr.length+"</div><div class='sl'>Yeni</div></div><div class='sb'><div class='sn'>"+co.length+"</div><div class='sl'>Tamamlanan</div></div><div class='sb'><div class='sn' style='color:"+(od.length>0?"#C0392B":"#1a1a2e")+"'>"+od.length+"</div><div class='sl'>Gecikmiş</div></div></div><h2>Kişi Bazlı</h2><table><thead><tr><th>Avukat</th><th>Aktif</th><th>Bu Hafta Tamamlanan</th><th>Gecikmiş</th></tr></thead><tbody>"+mr+"</tbody></table><div class='f'>"+OFFICE+"</div></body></html>";
+  const w=window.open("","_blank");if(w){w.document.write(html);w.document.close();setTimeout(()=>w.print(),500);}
+}
+
+// Task CRUD
+function addTask(){
+  if(!fd.title.trim())return;
+  const id=gid();
+  state.tasks.push({id,...fd,createdAt:new Date().toISOString(),createdBy:state.cu,updatedAt:new Date().toISOString(),updatedBy:state.cu,completedAt:null,completedBy:null});
+  state.logs.unshift({id:gid(),taskId:id,taskTitle:fd.title,action:"oluşturdu",userId:state.cu,timestamp:new Date().toISOString()});
+  if(state.logs.length>200)state.logs=state.logs.slice(0,200);
+  saveData();modals.showForm=false;render();
+}
+function updateTask(){
+  if(!fd.title.trim())return;
+  const idx=state.tasks.findIndex(t=>t.id===modals.editTask);
+  if(idx>=0){Object.assign(state.tasks[idx],fd,{updatedAt:new Date().toISOString(),updatedBy:state.cu});
+  state.logs.unshift({id:gid(),taskId:modals.editTask,taskTitle:fd.title,action:"düzenledi",userId:state.cu,timestamp:new Date().toISOString()});}
+  saveData();modals.showForm=false;modals.editTask=null;render();
+}
+function togComplete(tid){
+  const t=state.tasks.find(x=>x.id===tid);if(!t)return;
+  const done=t.status==="tamamlandi";
+  t.status=done?"devam":"tamamlandi";t.updatedAt=new Date().toISOString();t.updatedBy=state.cu;
+  t.completedAt=done?null:new Date().toISOString();t.completedBy=done?null:state.cu;
+  state.logs.unshift({id:gid(),taskId:tid,taskTitle:t.title,action:done?"geri aldı":"tamamladı",userId:state.cu,timestamp:new Date().toISOString()});
+  saveData();render();
+}
+function delTask(tid){
+  const t=state.tasks.find(x=>x.id===tid);
+  state.tasks=state.tasks.filter(x=>x.id!==tid);
+  state.logs.unshift({id:gid(),taskId:tid,taskTitle:t?t.title:"",action:"sildi",userId:state.cu,timestamp:new Date().toISOString()});
+  saveData();modals.showDet=null;render();
+}
+
+// Hearing CRUD
+function addHearing(){
+  if(!hf.court.trim()||!hf.date)return;
+  state.hearings.push({id:gid(),...hf,createdAt:new Date().toISOString(),createdBy:state.cu});
+  saveData();modals.showHForm=false;render();
+}
+function updateHearing(){
+  if(!hf.court.trim()||!hf.date)return;
+  const idx=state.hearings.findIndex(h=>h.id===modals.editH);
+  if(idx>=0)Object.assign(state.hearings[idx],hf,{updatedAt:new Date().toISOString(),updatedBy:state.cu});
+  saveData();modals.showHForm=false;modals.editH=null;render();
+}
+function delHearing(hid){
+  state.hearings=state.hearings.filter(h=>h.id!==hid);
+  saveData();modals.dayH=null;render();
+}
+
+// Filter & Sort
+function getFiltered(){
+  return state.tasks.filter(t=>{
+    if(state.filter==="active"&&t.status==="tamamlandi")return false;
+    if(state.filter==="completed"&&t.status!=="tamamlandi")return false;
+    if(state.filter==="overdue"&&(t.status==="tamamlandi"||!t.deadline||drem(t.deadline)>=0))return false;
+    if(state.filter==="mine"&&t.assignee!==state.cu)return false;
+    if(state.fAsn!=="all"&&t.assignee!==state.fAsn)return false;
+    if(state.fCat!=="all"&&t.category!==state.fCat)return false;
+    if(state.sq&&!t.title.toLowerCase().includes(state.sq.toLowerCase())&&!(t.description||"").toLowerCase().includes(state.sq.toLowerCase()))return false;
+    return true;
+  }).sort((a,b)=>{
+    if(state.sortBy==="deadline"){if(!a.deadline&&!b.deadline)return 0;if(!a.deadline)return 1;if(!b.deadline)return -1;return new Date(a.deadline)-new Date(b.deadline);}
+    if(state.sortBy==="priority"){const o={acil:0,yuksek:1,normal:2,dusuk:3};return(o[a.priority]||2)-(o[b.priority]||2);}
+    return new Date(b.createdAt)-new Date(a.createdAt);
+  });
+}
+
+// ── RENDER ──
+function render(){
+  const t=T();
+  document.body.className=state.theme==="dark"?"dark":"";
+  document.body.style.background=t.bg;
+
+  // Login screen
+  if(!state.cu){
+    document.getElementById("app").innerHTML=`
+    <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(160deg,#0f0f23 0%,#1a1a2e 40%,#16213e 100%);padding:24px">
+      <div style="text-align:center;animation:slideUp 0.6s ease;margin-bottom:40px">
+        <div style="font-size:48px;margin-bottom:12px">⚖️</div>
+        <h1 style="color:#C9A96E;font-size:20px;letter-spacing:4px;font-weight:300;margin:0 0 6px;text-transform:uppercase">${OFFICE}</h1>
+        <p style="color:rgba(255,255,255,0.35);font-size:13px;letter-spacing:1px">Görev Takip Sistemi</p>
+      </div>
+      <p style="color:rgba(255,255,255,0.5);font-size:14px;margin-bottom:20px;animation:slideUp 0.7s ease">Giriş yapmak için isminizi seçin</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;width:100%;max-width:340px;animation:slideUp 0.8s ease">
+        ${TEAM.map(m=>`<button onclick="state.cu='${m.id}';render()" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:16px;padding:24px 16px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:10px;color:#fff;font-family:inherit">
+          <div style="width:52px;height:52px;border-radius:50%;background:${m.col};display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700">${m.ini}</div>
+          <span style="font-size:14px;font-weight:600">${m.name}</span>
+        </button>`).join("")}
+      </div>
+    </div>`;return;
+  }
+
+  const me=tm(state.cu);
+  const myTC=state.tasks.filter(x=>x.assignee===state.cu&&x.status!=="tamamlandi").length;
+  const odCnt=state.tasks.filter(x=>x.status!=="tamamlandi"&&x.deadline&&drem(x.deadline)<0).length;
+  const todayC=state.tasks.filter(x=>x.status!=="tamamlandi"&&x.deadline&&drem(x.deadline)===0).length;
+  const filtered=getFiltered();
+  const upH=[...state.hearings].sort((a,b)=>new Date(a.date+"T"+(a.time||"00:00"))-new Date(b.date+"T"+(b.time||"00:00")));
+
+  let html=`
+  <!-- Header -->
+  <div style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);padding:16px 20px 20px;color:#fff">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="font-size:22px">⚖️</span><div><div style="font-size:10px;color:${t.gold};letter-spacing:2px;text-transform:uppercase;font-weight:300">MADALYON HUKUK</div><div style="font-size:10px;color:rgba(255,255,255,0.4);margin-top:1px">Görev Takip</div></div></div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button onclick="state.theme=state.theme==='light'?'dark':'light';render()" style="background:rgba(255,255,255,0.1);border:none;border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:rgba(255,255,255,0.6);font-size:14px">${state.theme==="light"?"🌙":"☀️"}</button>
+        <div style="width:32px;height:32px;border-radius:50%;background:${me.col};color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700">${me.ini}</div>
+        <button onclick="state.cu=null;render()" style="background:rgba(255,255,255,0.1);border:none;color:rgba(255,255,255,0.5);padding:5px 10px;border-radius:8px;font-size:10px;cursor:pointer;font-family:inherit">Çıkış</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px">
+      ${[{l:"Bende",v:myTC,c:t.gold},{l:"Aktif",v:state.tasks.filter(x=>x.status!=="tamamlandi").length,c:"#6CB4EE"},{l:"Bugün",v:todayC,c:todayC>0?"#E67E22":"#6CB4EE"},{l:"Gecikmiş",v:odCnt,c:odCnt>0?"#E74C3C":"#6CB4EE"}].map(s=>`<div style="flex:1;background:rgba(255,255,255,0.07);border-radius:12px;padding:10px 6px;text-align:center"><div style="font-size:20px;font-weight:700;color:${s.c}">${s.v}</div><div style="font-size:9px;color:rgba(255,255,255,0.4);margin-top:1px">${s.l}</div></div>`).join("")}
+    </div>
+  </div>
+
+  <!-- Quick Links -->
+  <div style="display:flex;gap:8px;padding:12px 16px 0">
+    ${QLINKS.map(ql=>`<a href="${ql.url}" target="_blank" rel="noopener" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 6px;background:${t.card};border:1.5px solid ${t.cb};border-radius:12px;text-decoration:none;cursor:pointer"><span style="font-size:20px">${ql.i}</span><span style="font-size:11px;font-weight:700;color:${t.tx}">${ql.l}</span><span style="font-size:9px;color:${t.tm}">${ql.d}</span></a>`).join("")}
+  </div>
+
+  <!-- View Tabs -->
+  <div style="display:flex;gap:0;padding:12px 16px 0;border-bottom:1px solid ${t.cb}">
+    ${["list:Görevler:📋","hearings:Duruşmalar:⚖️","calendar:Takvim:📅","history:Geçmiş:🕐"].map(v=>{const[id,l,i]=v.split(":");return`<button onclick="state.view='${id}';render()" style="display:flex;align-items:center;gap:5px;padding:10px 12px;font-size:12px;font-weight:600;border:none;cursor:pointer;background:transparent;color:${state.view===id?t.gold:t.tm};border-bottom:${state.view===id?"2px solid "+t.gold:"2px solid transparent"};font-family:inherit">${i} ${l}</button>`;}).join("")}
+    <div style="flex:1"></div>
+    <button onclick="genWeekly()" style="display:flex;align-items:center;gap:4px;padding:10px 8px;font-size:10px;font-weight:600;border:none;cursor:pointer;background:transparent;color:${t.tm};font-family:inherit">📊 Haftalık</button>
+  </div>`;
+
+  // ── LIST VIEW ──
+  if(state.view==="list"){
+    html+=`<div style="padding:14px 16px 6px">
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <div style="flex:1;position:relative"><input id="searchInput" value="${state.sq}" oninput="state.sq=this.value;render()" placeholder="Görev ara..." style="width:100%;padding:10px 14px 10px 36px;border-radius:12px;border:1.5px solid ${t.cb};font-size:13px;background:${t.card};box-sizing:border-box;color:${t.tx};font-family:inherit"><span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:14px;opacity:0.35">🔍</span></div>
+        <button onclick="state.showFlt=!state.showFlt;render()" style="background:${state.showFlt?t.fa:t.card};color:${state.showFlt?t.fat:t.ts};border:1.5px solid ${t.cb};border-radius:12px;padding:0 14px;font-size:12px;cursor:pointer;font-family:inherit">⚙ Filtre</button>
+        <button onclick="exportTasksPDF(getFiltered())" style="background:${t.card};color:#C0392B;border:1.5px solid ${t.cb};border-radius:12px;padding:0 14px;font-size:12px;cursor:pointer;font-weight:600;font-family:inherit">📄 PDF</button>
+      </div>
+      <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px">
+        ${[{id:"all",l:"Tümü"},{id:"mine",l:"Bana Atanan"},{id:"active",l:"Aktif"},{id:"overdue",l:"Gecikmiş"},{id:"completed",l:"Tamamlanan"}].map(f=>`<button onclick="state.filter='${f.id}';render()" style="padding:7px 14px;border-radius:20px;font-size:12px;font-weight:600;border:none;cursor:pointer;white-space:nowrap;background:${state.filter===f.id?t.fa:t.fb};color:${state.filter===f.id?t.fat:t.ts};font-family:inherit">${f.l}${f.id==="overdue"&&odCnt>0?" ("+odCnt+")":""}</button>`).join("")}
+      </div>
+      ${state.showFlt?`<div style="background:${t.card};border-radius:14px;padding:14px;margin-top:10px;border:1px solid ${t.cb};display:flex;gap:10px;flex-wrap:wrap">
+        <div style="flex:1;min-width:110px"><div style="font-size:10px;color:${t.tm};margin-bottom:4px;font-weight:600">Kişi</div><select onchange="state.fAsn=this.value;render()" style="width:100%;padding:8px 10px;border-radius:10px;border:1.5px solid ${t.ibd};font-size:12px;background:${t.ib};color:${t.tx};font-family:inherit"><option value="all"${state.fAsn==="all"?" selected":""}>Herkes</option>${TEAM.map(m=>`<option value="${m.id}"${state.fAsn===m.id?" selected":""}>${m.name}</option>`).join("")}</select></div>
+        <div style="flex:1;min-width:110px"><div style="font-size:10px;color:${t.tm};margin-bottom:4px;font-weight:600">Kategori</div><select onchange="state.fCat=this.value;render()" style="width:100%;padding:8px 10px;border-radius:10px;border:1.5px solid ${t.ibd};font-size:12px;background:${t.ib};color:${t.tx};font-family:inherit"><option value="all"${state.fCat==="all"?" selected":""}>Tümü</option>${CATS.map(c=>`<option value="${c.id}"${state.fCat===c.id?" selected":""}>${c.i} ${c.l}</option>`).join("")}</select></div>
+        <div style="flex:1;min-width:110px"><div style="font-size:10px;color:${t.tm};margin-bottom:4px;font-weight:600">Sıralama</div><select onchange="state.sortBy=this.value;render()" style="width:100%;padding:8px 10px;border-radius:10px;border:1.5px solid ${t.ibd};font-size:12px;background:${t.ib};color:${t.tx};font-family:inherit"><option value="deadline"${state.sortBy==="deadline"?" selected":""}>Son Tarihe Göre</option><option value="priority"${state.sortBy==="priority"?" selected":""}>Önceliğe Göre</option><option value="newest"${state.sortBy==="newest"?" selected":""}>En Yeniye Göre</option></select></div>
+      </div>`:""}
+    </div>
+    <div style="padding:4px 16px">`;
+
+    if(filtered.length===0){
+      html+=`<div style="text-align:center;padding:60px 20px;color:${t.tm}"><div style="font-size:44px;margin-bottom:12px">📋</div><p style="font-size:15px;font-weight:600;color:${t.ts}">Görev bulunamadı</p></div>`;
+    } else {
+      filtered.forEach((task,idx)=>{
+        const pr=PRIS.find(p=>p.id===task.priority);const cat=CATS.find(c=>c.id===task.category);const m=tm(task.assignee);const done=task.status==="tamamlandi";const days=drem(task.deadline);
+        let badge="";
+        if(task.deadline&&!done){
+          let bg,btx;if(days<0){bg="#C0392B";btx=Math.abs(days)+" gün gecikmiş!";}else if(days===0){bg="#E74C3C";btx="BUGÜN SON GÜN!";}else if(days<=3){bg="#E67E22";btx=days+" gün kaldı";}else if(days<=7){bg="#F39C12";btx=days+" gün kaldı";}else{bg="#27AE60";btx=days+" gün kaldı";}
+          badge=`<span style="display:inline-flex;align-items:center;gap:4px;background:${bg};color:#fff;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap${days<=1?";animation:pulse 1.5s ease-in-out infinite":""}">⏱ ${btx}</span>`;
+        }
+        html+=`<div onclick="modals.showDet=state.tasks.find(x=>x.id==='${task.id}');render()" style="background:${t.card};border-radius:14px;padding:14px 16px;margin-bottom:10px;cursor:pointer;border:1.5px solid ${done?"#27AE6030":t.cb};opacity:${done?0.65:1};animation:slideUp ${0.15+idx*0.04}s ease">
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <button onclick="event.stopPropagation();togComplete('${task.id}')" style="width:26px;height:26px;border-radius:8px;flex-shrink:0;border:${done?"none":"2px solid "+(pr?pr.c:"#ccc")};background:${done?"#27AE60":"transparent"};cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff;margin-top:1px;font-size:14px">${done?"✓":""}</button>
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:14px;font-weight:600;color:${done?t.tm:t.tx};text-decoration:${done?"line-through":"none"}">${task.title}</span>${done?`<span style="background:#27AE6018;color:#27AE60;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">TAMAMLANDI</span>`:""}</div>
+              ${task.description?`<p style="font-size:12px;color:${t.tm};margin:4px 0 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${task.description}</p>`:""}
+              <div style="display:flex;align-items:center;gap:6px;margin-top:8px;flex-wrap:wrap">
+                ${cat?`<span style="font-size:11px;color:${t.ts};background:${t.fb};padding:2px 8px;border-radius:8px">${cat.i} ${cat.l}</span>`:""}
+                ${pr?`<span style="font-size:11px;color:${pr.c};background:${pr.bg}88;padding:2px 8px;border-radius:8px;font-weight:600">${pr.l}</span>`:""}
+                ${task.deadline&&!done?`<span style="font-size:11px;color:${t.tm}">📅 ${fds(task.deadline)}</span>`:""}
+                ${task.tebligatDate&&!done?`<span style="font-size:11px;color:${t.gold};background:${t.gold}15;padding:2px 8px;border-radius:8px;font-weight:600">📬 ${fds(task.tebligatDate)}</span>`:""}
+                ${badge}
+              </div>
+            </div>
+            ${m?`<div style="width:30px;height:30px;border-radius:50%;background:${m.col};color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">${m.ini}</div>`:""}
+          </div>
+          ${done&&task.completedBy?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid #27AE6020;font-size:11px;color:#27AE60">${(tm(task.completedBy)||{}).name||"-"} tarafından tamamlandı${task.completedAt?" - "+fdt(task.completedAt):""}</div>`:""}
+        </div>`;
+      });
+    }
+    html+=`</div>`;
+  }
+
+  // ── HEARINGS VIEW ──
+  if(state.view==="hearings"){
+    html+=renderMiniCal(state.hearings,"date",hCalMonth,true);
+    html+=`<div style="padding:0 16px 12px;display:flex;gap:8px;align-items:center">
+      <input type="month" value="${pdfMonth}" onchange="pdfMonth=this.value;render()" style="flex:1;padding:9px 12px;border-radius:10px;border:1.5px solid ${t.cb};font-size:13px;background:${t.card};color:${t.tx};box-sizing:border-box;font-family:inherit">
+      <button onclick="var p=pdfMonth.split('-').map(Number);exportHearingsPDF(p[0],p[1]-1)" style="display:flex;align-items:center;gap:6px;padding:9px 16px;border-radius:10px;border:none;cursor:pointer;background:#C0392B;color:#fff;font-size:12px;font-weight:700;white-space:nowrap;font-family:inherit">📄 PDF Çıkart</button>
+    </div>
+    <div style="padding:0 16px 16px">
+      <div style="font-size:13px;font-weight:700;color:${t.tx};margin-bottom:10px">Yaklaşan Duruşmalar</div>`;
+    const upcoming=upH.filter(h=>drem(h.date)!==null&&drem(h.date)>=0);
+    if(upcoming.length===0){
+      html+=`<div style="text-align:center;padding:30px;color:${t.tm}"><div style="font-size:28px;opacity:0.3;margin-bottom:8px">⚖️</div><p style="font-size:13px">Yaklaşan duruşma yok</p></div>`;
+    } else {
+      upcoming.forEach(h=>{const m=tm(h.assignee);const cr=tm(h.createdBy);const days=drem(h.date);
+      html+=`<div style="background:${t.card};border-radius:14px;padding:14px 16px;margin-bottom:10px;border:1.5px solid ${t.cb}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div style="flex:1"><div style="font-size:14px;font-weight:700;color:${t.tx}">${h.court}</div><div style="font-size:12px;color:${t.ts};margin-top:2px">Dosya: ${h.fileNo}</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap"><span style="font-size:12px;color:${t.gold};font-weight:600">📅 ${fdt(h.date)} - ${h.time||"09:00"}</span>${days<=3?`<span style="background:${days===0?"#E74C3C":"#E67E22"};color:#fff;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:600">${days===0?"BUGÜN!":days+" gün kaldı"}</span>`:""}</div>
+            ${h.notes?`<div style="font-size:11px;color:${t.tm};margin-top:4px">${h.notes}</div>`:""}
+            <div style="font-size:10px;color:${t.tm};margin-top:6px">Ekleyen: ${cr?cr.name:"-"} - ${fdt(h.createdAt)}</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+            ${m?`<div style="width:30px;height:30px;border-radius:50%;background:${m.col};color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700">${m.ini}</div>`:""}
+            <div style="display:flex;gap:4px">
+              <button onclick="exportICS(state.hearings.find(x=>x.id==='${h.id}'))" style="background:${t.gold}18;border:none;border-radius:8px;padding:6px 8px;cursor:pointer;color:${t.gold};font-size:10px;font-weight:600;font-family:inherit">📅 Takvime</button>
+              <button onclick="hf={court:'${h.court.replace(/'/g,"\\'")}',fileNo:'${h.fileNo.replace(/'/g,"\\'")}',date:'${h.date}',time:'${h.time||"09:00"}',assignee:'${h.assignee||""}',notes:'${(h.notes||"").replace(/'/g,"\\'")}'};modals.editH='${h.id}';modals.showHForm=true;render()" style="background:${t.fb};border:none;border-radius:8px;padding:6px 8px;cursor:pointer;color:${t.ts};font-size:12px">✏</button>
+              <button onclick="delHearing('${h.id}')" style="background:#C0392B18;border:none;border-radius:8px;padding:6px 8px;cursor:pointer;color:#C0392B;font-size:12px">🗑</button>
+            </div>
+          </div>
+        </div>
+      </div>`;});
+    }
+    // Past hearings
+    const past=upH.filter(h=>drem(h.date)!==null&&drem(h.date)<0).reverse();
+    if(past.length>0){
+      html+=`<div style="font-size:13px;font-weight:700;color:${t.tm};margin-top:16px;margin-bottom:10px">Geçmiş Duruşmalar</div>`;
+      past.forEach(h=>{const m=tm(h.assignee);const cr=tm(h.createdBy);
+      html+=`<div style="background:${t.card};border-radius:14px;padding:12px 16px;margin-bottom:8px;border:1.5px solid ${t.cb};opacity:0.6">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div><div style="font-size:13px;font-weight:600;color:${t.tx}">${h.court}</div><div style="font-size:11px;color:${t.tm}">Dosya: ${h.fileNo} - ${fdt(h.date)} ${h.time||""}</div><div style="font-size:10px;color:${t.tm};margin-top:2px">Ekleyen: ${cr?cr.name:"-"}</div></div>
+          <div style="display:flex;align-items:center;gap:6px">${m?`<div style="width:26px;height:26px;border-radius:50%;background:${m.col};color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700">${m.ini}</div>`:""}<button onclick="delHearing('${h.id}')" style="background:#C0392B18;border:none;border-radius:6px;padding:4px 6px;cursor:pointer;color:#C0392B;font-size:11px">🗑</button></div>
+        </div>
+      </div>`;});
+    }
+    html+=`</div></div>`;
+  }
+
+  // ── CALENDAR VIEW ──
+  if(state.view==="calendar"){
+    html+=renderMiniCal(state.tasks,"deadline",calMonth,false);
+  }
+
+  // ── HISTORY VIEW ──
+  if(state.view==="history"){
+    if(state.logs.length===0){
+      html+=`<div style="text-align:center;padding:40px 20px;color:${t.tm}"><div style="font-size:32px;opacity:0.4;margin-bottom:8px">🕐</div><p>Henüz aktivite kaydı yok</p></div>`;
+    } else {
+      const gr={};state.logs.forEach(l=>{const dk=new Date(l.timestamp).toLocaleDateString("tr-TR",{day:"numeric",month:"long",year:"numeric"});if(!gr[dk])gr[dk]=[];gr[dk].push(l);});
+      html+=`<div style="padding:4px 16px 20px">`;
+      Object.entries(gr).forEach(([date,items])=>{
+        html+=`<div style="font-size:11px;font-weight:700;color:${t.tm};padding:12px 0 6px">${date}</div>`;
+        items.forEach(l=>{const m=tm(l.userId);let color=t.tm;if(l.action==="oluşturdu")color="#2E86C1";else if(l.action==="tamamladı")color="#27AE60";else if(l.action==="düzenledi")color="#E67E22";else if(l.action==="sildi")color="#C0392B";else if(l.action==="geri aldı")color="#8B4513";
+        html+=`<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid ${t.cb}"><div style="width:28px;height:28px;border-radius:50%;background:${color}18;display:flex;align-items:center;justify-content:center;color:${color};flex-shrink:0;margin-top:2px;font-size:12px">⏱</div><div style="flex:1"><div style="font-size:13px;color:${t.tx}"><b>${m?m.name:"?"}</b> <span style="color:${t.ts}">${l.taskTitle}</span> görevini <b style="color:${color}">${l.action}</b></div><div style="font-size:10px;color:${t.tm};margin-top:2px">${ftm(l.timestamp)}</div></div></div>`;});
+      });
+      html+=`</div>`;
+    }
+  }
+
+  // FAB
+  html+=`<button onclick="${state.view==="hearings"?"openNewHearing()":"openNewTask()"}" style="position:fixed;bottom:28px;right:20px;width:58px;height:58px;border-radius:50%;border:none;cursor:pointer;background:${t.fab};color:${state.theme==="dark"?"#0d0d1a":"#fff"};font-size:28px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 24px rgba(0,0,0,0.3);z-index:100">+</button>`;
+  html+=`<div style="height:100px"></div>`;
+
+  document.getElementById("app").innerHTML=html;
+
+  // Render modals on top
+  renderModals();
+}
+
+function openNewTask(){fd={title:"",description:"",priority:"normal",deadline:"",assignee:"",category:"dava",status:"bekliyor",tebligatDate:""};modals.editTask=null;modals.showForm=true;render();}
+function openNewHearing(){hf={court:"",fileNo:"",date:"",time:"09:00",assignee:"",notes:""};modals.editH=null;modals.showHForm=true;render();}
+function openNewHearingDate(ds){hf={court:"",fileNo:"",date:ds,time:"09:00",assignee:"",notes:""};modals.editH=null;modals.showHForm=true;render();}
+
+// Mini Calendar renderer
+function renderMiniCal(items,dateKey,monthObj,allowEmpty){
+  const t=T();const y=monthObj.getFullYear(),mo=monthObj.getMonth();
+  const fd2=new Date(y,mo,1).getDay();const dim=new Date(y,mo+1,0).getDate();
+  const today=new Date();today.setHours(0,0,0,0);
+  const mn=monthObj.toLocaleDateString("tr-TR",{month:"long",year:"numeric"});
+  const byDate={};items.forEach(it=>{const k=it[dateKey];if(k){const dk=k.substring(0,10);if(!byDate[dk])byDate[dk]=[];byDate[dk].push(it);}});
+  const cells=[];const sd=fd2===0?6:fd2-1;for(let i=0;i<sd;i++)cells.push(null);for(let d=1;d<=dim;d++)cells.push(d);
+  const calId=allowEmpty?"hCalMonth":"calMonth";
+  let h=`<div style="padding:0 16px 16px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding:0 4px">
+    <button onclick="${calId}.setMonth(${calId}.getMonth()-1);render()" style="background:${t.card};border:1px solid ${t.cb};border-radius:8px;width:34px;height:34px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:${t.ts};font-size:16px">‹</button>
+    <span style="font-size:16px;font-weight:700;color:${t.tx};text-transform:capitalize">${mn}</span>
+    <button onclick="${calId}.setMonth(${calId}.getMonth()+1);render()" style="background:${t.card};border:1px solid ${t.cb};border-radius:8px;width:34px;height:34px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:${t.ts};font-size:16px">›</button>
+  </div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center">`;
+  ["Pt","Sa","Ça","Pe","Cu","Ct","Pa"].forEach(d=>{h+=`<div style="font-size:10px;font-weight:600;color:${t.tm};padding:6px 0">${d}</div>`;});
+  cells.forEach((day,i)=>{
+    if(day===null){h+=`<div></div>`;return;}
+    const ds=`${y}-${String(mo+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+    const dt=byDate[ds]||[];const isT=new Date(y,mo,day).getTime()===today.getTime();
+    let onclick="";
+    if(dt.length>0){onclick=allowEmpty?`modals.dayH={date:'${ds}',items:state.hearings.filter(x=>x.date&&x.date.startsWith('${ds}'))};render()`:`modals.dayTasks={date:'${ds}',tasks:state.tasks.filter(x=>x.deadline&&x.deadline.startsWith('${ds}'))};render()`;}
+    else if(allowEmpty){onclick=`openNewHearingDate('${ds}')`;}
+    h+=`<div onclick="${onclick}" style="padding:8px 2px 6px;border-radius:10px;cursor:pointer;background:${isT?t.ct:"transparent"};border:${dt.length>0&&!isT?"1px solid "+t.cb:"1px solid transparent"}"><div style="font-size:13px;font-weight:${isT?700:400};color:${isT?t.ctt:t.tx}">${day}</div>${dt.length>0?`<div style="display:flex;justify-content:center;gap:2px;margin-top:3px">${dt.slice(0,3).map(()=>`<div style="width:5px;height:5px;border-radius:50%;background:${t.ct}"></div>`).join("")}${dt.length>3?`<div style="font-size:8px;color:${t.tm}">+</div>`:""}</div>`:""}</div>`;
+  });
+  h+=`</div></div>`;
+  return h;
+}
+
+// Modal rendering
+function renderModals(){
+  const t=T();let mhtml="";
+
+  // Task Detail Modal
+  if(modals.showDet){
+    const task=modals.showDet;const pr=PRIS.find(p=>p.id===task.priority);const st=STS.find(s=>s.id===task.status);const cat=CATS.find(c=>c.id===task.category);const m=tm(task.assignee);const cr=tm(task.createdBy);const days=drem(task.deadline);const done=task.status==="tamamlandi";
+    const tl=state.logs.filter(l=>l.taskId===task.id).slice(0,10);
+    mhtml+=renderModalWrap("Görev Detayı","modals.showDet=null;render()",`
+      ${done?`<div style="background:#27AE6012;border:1px solid #27AE6030;border-radius:12px;padding:14px 16px;margin-bottom:16px;text-align:center"><div style="font-size:24px;margin-bottom:4px">✅</div><div style="font-weight:700;color:#27AE60;font-size:15px">TAMAMLANDI</div>${task.completedBy?`<div style="font-size:12px;color:#52BE80;margin-top:4px">${(tm(task.completedBy)||{}).name||""} - ${fdt(task.completedAt)}</div>`:""}</div>`:""}
+      <h3 style="margin:0 0 12px;font-size:18px;color:${t.tx}">${task.title}</h3>
+      ${task.description?`<p style="color:${t.ts};font-size:14px;line-height:1.6;margin:0 0 16px;background:${t.ib};padding:14px;border-radius:10px">${task.description}</p>`:""}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+        ${[{l:"Kategori",v:cat?cat.i+" "+cat.l:"-"},{l:"Öncelik",v:pr?pr.l:"-",c:pr?pr.c:""},{l:"Durum",v:st?st.i+" "+st.l:"-",c:st?st.c:""},{l:"Son Tarih",v:task.deadline?fdt(task.deadline):"-"}].map(item=>`<div style="background:${t.ib};border-radius:10px;padding:10px 14px"><div style="font-size:10px;color:${t.tm};font-weight:600;margin-bottom:4px">${item.l}</div><div style="font-size:13px;font-weight:600;color:${item.c||t.tx}">${item.v}</div></div>`).join("")}
+      </div>
+      ${task.tebligatDate?`<div style="display:flex;align-items:center;gap:10px;background:${t.gold}15;border-radius:10px;padding:10px 14px;margin-bottom:12px;border:1px solid ${t.gold}30"><span style="font-size:18px">📬</span><div><div style="font-size:10px;color:${t.gold};font-weight:600">TEBLİGAT TARİHİ</div><div style="font-size:13px;font-weight:600;color:${t.tx}">${fdt(task.tebligatDate)}</div></div></div>`:""}
+      ${task.deadline&&!done?`<div style="background:${days<0?"#C0392B12":days<=3?"#E67E2212":"#27AE6012"};border-radius:12px;padding:14px 16px;margin-bottom:16px;text-align:center"><div style="font-size:28px;font-weight:800;color:${days<0?"#C0392B":days<=3?"#E67E22":"#27AE60"}">${days<0?Math.abs(days)+" gün gecikmiş!":days===0?"BUGÜN SON GÜN!":days+" gün kaldı"}</div><div style="font-size:11px;color:${t.tm};margin-top:4px">Son tarih: ${fdt(task.deadline)}</div></div>`:""}
+      ${m?`<div style="display:flex;align-items:center;gap:10px;background:${t.ib};border-radius:10px;padding:10px 14px;margin-bottom:16px"><div style="width:36px;height:36px;border-radius:50%;background:${m.col};color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700">${m.ini}</div><div><div style="font-size:10px;color:${t.tm};font-weight:600">ATANAN KİŞİ</div><div style="font-size:14px;font-weight:600;color:${t.tx}">${m.name}</div></div></div>`:""}
+      ${tl.length>0?`<div style="margin-bottom:16px"><div style="font-size:11px;font-weight:700;color:${t.tm};margin-bottom:8px">Görev Geçmişi</div>${tl.map(l=>{const lm=tm(l.userId);return`<div style="font-size:12px;color:${t.ts};padding:4px 0;display:flex;gap:6px"><span style="color:${t.tm}">${ftm(l.timestamp)}</span><span><b>${lm?lm.name:"?"}</b> ${l.action}</span></div>`;}).join("")}</div>`:""}
+      <div style="font-size:11px;color:${t.tm};margin-bottom:20px">Oluşturan: ${cr?cr.name:"-"} - ${fdt(task.createdAt)}</div>
+      <div style="display:flex;gap:10px">
+        <button onclick="togComplete('${task.id}');modals.showDet=null;render()" style="flex:1;padding:12px 0;border-radius:10px;border:none;font-size:13px;font-weight:700;cursor:pointer;background:${done?"#E67E2218":"#27AE6018"};color:${done?"#E67E22":"#27AE60"};font-family:inherit">${done?"Geri Al":"Tamamla"}</button>
+        <button onclick="fd={title:'${task.title.replace(/'/g,"\\'")}',description:'${(task.description||"").replace(/'/g,"\\'")}',priority:'${task.priority}',deadline:'${task.deadline||""}',assignee:'${task.assignee||""}',category:'${task.category||"dava"}',status:'${task.status}',tebligatDate:'${task.tebligatDate||""}'};modals.editTask='${task.id}';modals.showForm=true;modals.showDet=null;render()" style="flex:1;padding:12px 0;border-radius:10px;border:none;font-size:13px;font-weight:700;cursor:pointer;background:#2E86C118;color:#2E86C1;font-family:inherit">Düzenle</button>
+        <button onclick="delTask('${task.id}')" style="padding:12px 18px;border-radius:10px;border:none;font-size:13px;font-weight:700;cursor:pointer;background:#C0392B18;color:#C0392B;font-family:inherit">Sil</button>
+      </div>
+    `);
+  }
+
+  // Task Form Modal
+  if(modals.showForm){
+    const isEdit=!!modals.editTask;
+    mhtml+=renderModalWrap(isEdit?"Görevi Düzenle":"Yeni Görev","modals.showForm=false;modals.editTask=null;render()",`
+      <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:${t.ts};margin-bottom:5px">Görev Başlığı *</label><input id="fdTitle" value="${fd.title}" oninput="fd.title=this.value" placeholder="Ör: Dava dilekçesi hazırla" style="width:100%;padding:11px 14px;border-radius:10px;border:1.5px solid ${t.ibd};font-size:14px;background:${t.ib};color:${t.tx};box-sizing:border-box;font-family:inherit"></div>
+      <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:${t.ts};margin-bottom:5px">Açıklama</label><textarea id="fdDesc" oninput="fd.description=this.value" placeholder="Detaylar..." rows="3" style="width:100%;padding:11px 14px;border-radius:10px;border:1.5px solid ${t.ibd};font-size:14px;background:${t.ib};color:${t.tx};box-sizing:border-box;font-family:inherit;resize:vertical">${fd.description}</textarea></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:${t.ts};margin-bottom:5px">Kategori</label><select onchange="fd.category=this.value" style="width:100%;padding:11px 14px;border-radius:10px;border:1.5px solid ${t.ibd};font-size:14px;background:${t.ib};color:${t.tx};box-sizing:border-box;font-family:inherit">${CATS.map(c=>`<option value="${c.id}"${fd.category===c.id?" selected":""}>${c.i} ${c.l}</option>`).join("")}</select></div>
+        <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:${t.ts};margin-bottom:5px">Öncelik</label><select onchange="fd.priority=this.value" style="width:100%;padding:11px 14px;border-radius:10px;border:1.5px solid ${t.ibd};font-size:14px;background:${t.ib};color:${t.tx};box-sizing:border-box;font-family:inherit">${PRIS.map(p=>`<option value="${p.id}"${fd.priority===p.id?" selected":""}>${p.l}</option>`).join("")}</select></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:${t.ts};margin-bottom:5px">Son Tarih</label><input type="date" value="${fd.deadline}" onchange="fd.deadline=this.value;render()" style="width:100%;padding:11px 14px;border-radius:10px;border:1.5px solid ${t.ibd};font-size:14px;background:${t.ib};color:${t.tx};box-sizing:border-box;font-family:inherit"></div>
+        <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:${t.ts};margin-bottom:5px">Atanan Kişi</label><select onchange="fd.assignee=this.value" style="width:100%;padding:11px 14px;border-radius:10px;border:1.5px solid ${t.ibd};font-size:14px;background:${t.ib};color:${t.tx};box-sizing:border-box;font-family:inherit"><option value="">Seçiniz</option>${TEAM.map(m=>`<option value="${m.id}"${fd.assignee===m.id?" selected":""}>${m.name}</option>`).join("")}</select></div>
+      </div>
+      <div style="margin-bottom:14px;background:${t.ib};border-radius:12px;padding:14px;border:1px solid ${t.cb}">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:${t.ts};margin-bottom:8px">📬 Tebligat Tarihi <span style="font-weight:400;color:${t.tm}">(opsiyonel)</span></label>
+        <input type="date" value="${fd.tebligatDate}" onchange="fd.tebligatDate=this.value;render()" style="width:100%;padding:11px 14px;border-radius:10px;border:1.5px solid ${t.ibd};font-size:14px;background:${t.ib==="FAFBFC"?"#fff":t.ib};color:${t.tx};box-sizing:border-box;font-family:inherit;margin-bottom:${fd.tebligatDate?"10px":"0"}">
+        ${fd.tebligatDate?`<div><div style="font-size:11px;color:${t.tm};margin-bottom:6px;margin-top:2px">Süre seçin:</div><div style="display:flex;gap:6px;flex-wrap:wrap">${[{l:"1 Hafta",d:7},{l:"2 Hafta",d:14},{l:"3 Hafta",d:21},{l:"30 Gün",d:30},{l:"45 Gün",d:45},{l:"60 Gün",d:60}].map(opt=>{const cd=new Date(fd.tebligatDate);cd.setDate(cd.getDate()+opt.d);const cs=cd.toISOString().split("T")[0];const sel=fd.deadline===cs;return`<button onclick="fd.deadline='${cs}';render()" style="padding:7px 12px;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;border:1.5px solid ${sel?t.gold:t.cb};background:${sel?t.gold+"20":"transparent"};color:${sel?t.gold:t.ts};font-family:inherit">${opt.l}<div style="font-size:9px;font-weight:400;color:${t.tm};margin-top:2px">${cd.toLocaleDateString("tr-TR",{day:"numeric",month:"short"})}</div></button>`;}).join("")}</div>${fd.deadline?`<div style="margin-top:8px;font-size:12px;color:${t.gold};font-weight:600">📅 Son tarih: ${fdt(fd.deadline)}</div>`:""}</div>`:""}
+      </div>
+      ${isEdit?`<div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:${t.ts};margin-bottom:5px">Durum</label><div style="display:flex;gap:8px">${STS.map(s=>`<button onclick="fd.status='${s.id}';render()" style="flex:1;padding:10px 6px;border-radius:10px;border:2px solid ${fd.status===s.id?s.c:t.cb};background:${fd.status===s.id?s.bg:t.card};color:${fd.status===s.id?s.c:t.tm};font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">${s.i} ${s.l}</button>`).join("")}</div></div>`:""}
+      <div style="display:flex;gap:10px;margin-top:20px">
+        <button onclick="modals.showForm=false;modals.editTask=null;render()" style="flex:1;padding:13px 0;border-radius:12px;border:none;background:${t.fb};color:${t.ts};font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">İptal</button>
+        <button onclick="${isEdit?"updateTask()":"addTask()"}" style="flex:2;padding:13px 0;border-radius:12px;border:none;background:${t.fab};color:${state.theme==="dark"?"#0d0d1a":"#fff"};font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">${isEdit?"Kaydet":"Görev Ekle"}</button>
+      </div>
+    `);
+  }
+
+  // Hearing Form Modal
+  if(modals.showHForm){
+    const isEdit=!!modals.editH;
+    mhtml+=renderModalWrap(isEdit?"Duruşmayı Düzenle":"Yeni Duruşma","modals.showHForm=false;modals.editH=null;render()",`
+      <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:${t.ts};margin-bottom:5px">Mahkeme / Birim *</label><input value="${hf.court}" oninput="hf.court=this.value" placeholder="Ör: Ankara 5. Asliye Hukuk Mah." style="width:100%;padding:11px 14px;border-radius:10px;border:1.5px solid ${t.ibd};font-size:14px;background:${t.ib};color:${t.tx};box-sizing:border-box;font-family:inherit"></div>
+      <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:${t.ts};margin-bottom:5px">Dosya No</label><input value="${hf.fileNo}" oninput="hf.fileNo=this.value" placeholder="Ör: 2024/1234 E." style="width:100%;padding:11px 14px;border-radius:10px;border:1.5px solid ${t.ibd};font-size:14px;background:${t.ib};color:${t.tx};box-sizing:border-box;font-family:inherit"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:${t.ts};margin-bottom:5px">Tarih *</label><input type="date" value="${hf.date}" onchange="hf.date=this.value" style="width:100%;padding:11px 14px;border-radius:10px;border:1.5px solid ${t.ibd};font-size:14px;background:${t.ib};color:${t.tx};box-sizing:border-box;font-family:inherit"></div>
+        <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:${t.ts};margin-bottom:5px">Saat</label><input type="time" value="${hf.time}" onchange="hf.time=this.value" style="width:100%;padding:11px 14px;border-radius:10px;border:1.5px solid ${t.ibd};font-size:14px;background:${t.ib};color:${t.tx};box-sizing:border-box;font-family:inherit"></div>
+      </div>
+      <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:${t.ts};margin-bottom:5px">Avukat</label><select onchange="hf.assignee=this.value" style="width:100%;padding:11px 14px;border-radius:10px;border:1.5px solid ${t.ibd};font-size:14px;background:${t.ib};color:${t.tx};box-sizing:border-box;font-family:inherit"><option value="">Seçiniz</option>${TEAM.map(m=>`<option value="${m.id}"${hf.assignee===m.id?" selected":""}>${m.name}</option>`).join("")}</select></div>
+      <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:${t.ts};margin-bottom:5px">Notlar</label><textarea oninput="hf.notes=this.value" placeholder="Ek bilgiler..." rows="2" style="width:100%;padding:11px 14px;border-radius:10px;border:1.5px solid ${t.ibd};font-size:14px;background:${t.ib};color:${t.tx};box-sizing:border-box;font-family:inherit;resize:vertical">${hf.notes}</textarea></div>
+      <div style="display:flex;gap:10px;margin-top:20px">
+        <button onclick="modals.showHForm=false;modals.editH=null;render()" style="flex:1;padding:13px 0;border-radius:12px;border:none;background:${t.fb};color:${t.ts};font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">İptal</button>
+        <button onclick="${isEdit?"updateHearing()":"addHearing()"}" style="flex:2;padding:13px 0;border-radius:12px;border:none;background:${t.fab};color:${state.theme==="dark"?"#0d0d1a":"#fff"};font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">${isEdit?"Kaydet":"Duruşma Ekle"}</button>
+      </div>
+    `);
+  }
+
+  // Day modals
+  if(modals.dayTasks){
+    mhtml+=renderModalWrap(fdt(modals.dayTasks.date),"modals.dayTasks=null;render()",
+      modals.dayTasks.tasks.map(task=>{const pr=PRIS.find(p=>p.id===task.priority);const m=tm(task.assignee);const done=task.status==="tamamlandi";
+      return`<div onclick="modals.showDet=state.tasks.find(x=>x.id==='${task.id}');modals.dayTasks=null;render()" style="display:flex;gap:10px;align-items:center;padding:12px 0;border-bottom:1px solid ${t.cb};cursor:pointer"><div style="width:8px;height:8px;border-radius:50%;background:${done?"#27AE60":pr?pr.c:"#ccc"};flex-shrink:0"></div><div style="flex:1"><div style="font-size:14px;font-weight:600;color:${done?t.tm:t.tx};text-decoration:${done?"line-through":"none"}">${task.title}</div><div style="font-size:11px;color:${t.tm}">${m?m.name:"-"}</div></div></div>`;}).join(""));
+  }
+  if(modals.dayH){
+    mhtml+=renderModalWrap(fdt(modals.dayH.date)+" Duruşmaları","modals.dayH=null;render()",
+      modals.dayH.items.map(h=>{const m=tm(h.assignee);const cr=tm(h.createdBy);
+      return`<div style="padding:12px 0;border-bottom:1px solid ${t.cb}"><div style="font-size:14px;font-weight:700;color:${t.tx}">${h.court}</div><div style="font-size:12px;color:${t.ts}">Dosya: ${h.fileNo}</div><div style="font-size:12px;color:${t.gold};font-weight:600;margin-top:4px">Saat: ${h.time||"09:00"}</div>${h.notes?`<div style="font-size:11px;color:${t.tm};margin-top:4px">${h.notes}</div>`:""}<div style="font-size:10px;color:${t.tm};margin-top:4px">Ekleyen: ${cr?cr.name:"-"}</div><div style="display:flex;gap:4px;margin-top:6px"><button onclick="exportICS(state.hearings.find(x=>x.id==='${h.id}'))" style="background:${t.gold}18;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;color:${t.gold};font-size:10px;font-weight:600;font-family:inherit">Takvime Ekle</button></div></div>`;}).join(""));
+  }
+
+  // Append modals
+  let modalDiv=document.getElementById("modals");
+  if(!modalDiv){modalDiv=document.createElement("div");modalDiv.id="modals";document.body.appendChild(modalDiv);}
+  modalDiv.innerHTML=mhtml;
+}
+
+function renderModalWrap(title,onClose,content){
+  const t=T();
+  return`<div onclick="${onClose}" style="position:fixed;inset:0;z-index:1000;background:${t.ov};display:flex;align-items:flex-end;justify-content:center;animation:fadeIn 0.2s"><div onclick="event.stopPropagation()" style="background:${t.mb};border-radius:20px 20px 0 0;width:100%;max-width:560px;max-height:92vh;overflow:auto;box-shadow:0 -8px 40px rgba(0,0,0,0.2);animation:slideUp 0.3s"><div style="display:flex;justify-content:center;padding:12px 0 0"><div style="width:40px;height:4px;border-radius:2px;background:${t.tm};opacity:0.4"></div></div><div style="display:flex;justify-content:space-between;align-items:center;padding:12px 24px 16px"><h2 style="margin:0;font-size:18px;color:${t.tx};font-weight:700">${title}</h2><button onclick="${onClose}" style="background:${t.fb};border:none;cursor:pointer;color:${t.tm};width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px">✕</button></div><div style="padding:0 24px 28px">${content}</div></div></div>`;
+}
+
+// Initial render
+render();
+</script>
+</body>
+</html>
