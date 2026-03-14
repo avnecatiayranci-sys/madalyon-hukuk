@@ -224,7 +224,7 @@ function renderCalculator(){
 
       <!-- Tabs -->
       <div style="display:flex;gap:6px;margin-bottom:20px">
-        ${[{id:"smm",l:"SMM",i:"📄"},{id:"faiz",l:"Faiz",i:"💰"},{id:"vekalet",l:"Vekalet",i:"⚖️"}].map(tab=>`<button onclick="calcTab='${tab.id}';renderCalculator()" style="flex:1;padding:10px 8px;border-radius:12px;border:${calcTab===tab.id?"1.5px solid #C9A96E":"1.5px solid rgba(255,255,255,0.1)"};background:${calcTab===tab.id?"rgba(201,169,110,0.15)":"rgba(255,255,255,0.04)"};color:${calcTab===tab.id?"#C9A96E":"#A0A0B8"};font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">${tab.i} ${tab.l}</button>`).join("")}
+        ${[{id:"smm",l:"SMM",i:"📄"},{id:"faiz",l:"Faiz",i:"💰"},{id:"dava",l:"Dava V.Ü.",i:"⚖️"},{id:"icra",l:"İcra V.Ü.",i:"📋"}].map(tab=>`<button onclick="calcTab='${tab.id}';renderCalculator()" style="flex:1;padding:10px 6px;border-radius:12px;border:${calcTab===tab.id?"1.5px solid #C9A96E":"1.5px solid rgba(255,255,255,0.1)"};background:${calcTab===tab.id?"rgba(201,169,110,0.15)":"rgba(255,255,255,0.04)"};color:${calcTab===tab.id?"#C9A96E":"#A0A0B8"};font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">${tab.i} ${tab.l}</button>`).join("")}
       </div>`;
 
   // ── SMM ──
@@ -253,14 +253,23 @@ function renderCalculator(){
     </div>`;
   }
 
-  // ── VEKALET ──
-  if(calcTab==="vekalet"){
+  // ── DAVA VEKALET ÜCRETİ ──
+  if(calcTab==="dava"){
     html+=`<div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px">
-      <h3 style="color:#E8E8F0;font-size:16px;margin:0 0 16px">Vekalet Ücreti Hesaplama</h3>
-      <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:#A0A0B8;margin-bottom:5px">Konusu</label><select onchange="vek.konu=this.value" ${sel2}><option value="dava"${vek.konu==="dava"?" selected":""}>Konusu Para Olan Davalar</option><option value="icra"${vek.konu==="icra"?" selected":""}>İcra Takipleri</option></select></div>
-      <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:#A0A0B8;margin-bottom:5px">Mahkeme</label><select onchange="vek.mahkeme=this.value" ${sel2}><option value="icra"${vek.mahkeme==="icra"?" selected":""}>İcra Mahkemeleri</option><option value="sulh"${vek.mahkeme==="sulh"?" selected":""}>Sulh Mahkemeleri</option><option value="sulhceza"${vek.mahkeme==="sulhceza"?" selected":""}>Sulh Ceza/İnfaz Hakimlikleri</option><option value="asliye"${vek.mahkeme==="asliye"?" selected":""}>Asliye Mahkemeleri</option><option value="tuketici"${vek.mahkeme==="tuketici"?" selected":""}>Tüketici Mahkemeleri</option><option value="fikri"${vek.mahkeme==="fikri"?" selected":""}>Fikri ve Sınai Mahkemeleri</option><option value="idareD"${vek.mahkeme==="idareD"?" selected":""}>İdare ve Yargı Mah. (Duruşmalı)</option><option value="idareS"${vek.mahkeme==="idareS"?" selected":""}>İdare ve Yargı Mah. (Duruşmasız)</option></select></div>
-      <div style="margin-bottom:16px"><label style="display:block;font-size:12px;font-weight:600;color:#A0A0B8;margin-bottom:5px">Tutar (₺)</label><input type="number" value="${vek.tutar}" oninput="vek.tutar=this.value" placeholder="0.00" ${is2}></div>
-      <button onclick="calcVekalet()" style="width:100%;padding:13px 0;border-radius:12px;border:none;background:linear-gradient(135deg,#C9A96E 0%,#B8944E 100%);color:#0f0f23;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Hesapla</button>
+      <h3 style="color:#E8E8F0;font-size:16px;margin:0 0 16px">Konusu Para Olan Davalar - Vekalet Ücreti</h3>
+      <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:#A0A0B8;margin-bottom:5px">Mahkeme</label><select onchange="vek.mahkeme=this.value" ${sel2}><option value="icra"${vek.mahkeme==="icra"?" selected":""}>İcra Mahkemeleri</option><option value="sulh"${vek.mahkeme==="sulh"?" selected":""}>Sulh Mahkemeleri</option><option value="sulhceza"${vek.mahkeme==="sulhceza"?" selected":""}>Sulh Ceza/İnfaz Hakimlikleri</option><option value="asliye"${vek.mahkeme==="asliye"?" selected":""}>Asliye Mahkemeleri</option><option value="tuketici"${vek.mahkeme==="tuketici"?" selected":""}>Tüketici Mahkemeleri</option><option value="fikri"${vek.mahkeme==="fikri"?" selected":""}>Fikri ve Sınai Mahkemeleri</option><option value="idareD"${vek.mahkeme==="idareD"?" selected":""}>İdare ve Vergi Mah. (Duruşmalı)</option><option value="idareS"${vek.mahkeme==="idareS"?" selected":""}>İdare ve Vergi Mah. (Duruşmasız)</option></select></div>
+      <div style="margin-bottom:16px"><label style="display:block;font-size:12px;font-weight:600;color:#A0A0B8;margin-bottom:5px">Dava Tutarı (₺)</label><input type="number" value="${vek.tutar}" oninput="vek.tutar=this.value" placeholder="0.00" ${is2}></div>
+      <button onclick="vek.konu='dava';calcVekalet()" style="width:100%;padding:13px 0;border-radius:12px;border:none;background:linear-gradient(135deg,#C9A96E 0%,#B8944E 100%);color:#0f0f23;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Hesapla</button>
+      <div id="vekaletResult" style="margin-top:16px"></div>
+    </div>`;
+  }
+
+  // ── İCRA TAKİBİ VEKALET ÜCRETİ ──
+  if(calcTab==="icra"){
+    html+=`<div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px">
+      <h3 style="color:#E8E8F0;font-size:16px;margin:0 0 16px">İcra Takipleri - Vekalet Ücreti</h3>
+      <div style="margin-bottom:16px"><label style="display:block;font-size:12px;font-weight:600;color:#A0A0B8;margin-bottom:5px">Takip Tutarı (₺)</label><input type="number" value="${vek.tutar}" oninput="vek.tutar=this.value" placeholder="0.00" ${is2}></div>
+      <button onclick="vek.konu='icra';calcVekalet()" style="width:100%;padding:13px 0;border-radius:12px;border:none;background:linear-gradient(135deg,#C9A96E 0%,#B8944E 100%);color:#0f0f23;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Hesapla</button>
       <div id="vekaletResult" style="margin-top:16px"></div>
     </div>`;
   }
@@ -340,13 +349,13 @@ function calcVekalet(){
 
   // 2025-2026 AAÜT maktu ücretler
   const maktu={icra:9000,sulh:13500,sulhceza:11000,asliye:30000,tuketici:13500,fikri:30000,idareD:30000,idareS:20000};
-  const maktuUcret=maktu[vek.mahkeme]||30000;
+  const maktuUcret= vek.konu==="icra" ? 9000 : (maktu[vek.mahkeme]||30000);
 
   // 2025-2026 AAÜT Üçüncü Kısım - Nisbi tarife dilimleri
   // Konusu para olan davalar
   const davaDilimleri=[
-    {limit:400000, oran:0.16},
-    {limit:400000, oran:0.15},
+    {limit:600000, oran:0.16},
+    {limit:600000, oran:0.15},
     {limit:800000, oran:0.14},
     {limit:800000, oran:0.13},
     {limit:1200000, oran:0.11},
