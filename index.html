@@ -15,7 +15,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
-  input[type="date"],input[type="time"],input[type="month"]{-webkit-appearance:none;height:44px !important;max-height:44px !important;padding:0 14px !important;font-size:14px !important}
+input[type="date"],input[type="time"],input[type="month"]{-webkit-appearance:none;height:44px !important;max-height:44px !important;padding:0 14px !important;font-size:14px !important}
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#F4F5F7;overscroll-behavior:none;-webkit-tap-highlight-color:transparent}
 body.dark{background:#0d0d1a}
@@ -75,6 +75,10 @@ let hf={court:"",fileNo:"",date:"",time:"09:00",assignee:"",notes:""};
 let calMonth=new Date();
 let hCalMonth=new Date();
 let pdfMonth=new Date().getFullYear()+"-"+String(new Date().getMonth()+1).padStart(2,"0");
+let calcTab="smm"; // smm, faiz, vekalet
+let smm={type:"dahil",kdv:"haric",tutar:""};
+let faiz={anapara:"",baslangic:"",bitis:"",oran:"",gun:"365"};
+let vek={konu:"dava",mahkeme:"asliye",tutar:""};
 
 // Helpers
 function gid(){return Date.now().toString(36)+Math.random().toString(36).substr(2,9)}
@@ -205,6 +209,165 @@ function getFiltered(){
   });
 }
 
+// ── CALCULATOR ──
+function renderCalculator(){
+  const t={bg:"#0f0f23",card:"rgba(255,255,255,0.06)",cb:"rgba(255,255,255,0.1)",tx:"#E8E8F0",ts:"#A0A0B8",tm:"#6a6a80",gold:"#C9A96E",ib:"rgba(255,255,255,0.08)",ibd:"rgba(255,255,255,0.15)"};
+  const is2='style="width:100%;padding:0 14px;height:44px;border-radius:10px;border:1.5px solid rgba(255,255,255,0.15);font-size:14px;background:rgba(255,255,255,0.08);color:#E8E8F0;box-sizing:border-box;font-family:inherit"';
+  const sel2='style="width:100%;padding:0 14px;height:44px;border-radius:10px;border:1.5px solid rgba(255,255,255,0.15);font-size:14px;background:rgba(255,255,255,0.08);color:#E8E8F0;box-sizing:border-box;font-family:inherit;-webkit-appearance:none;appearance:none"';
+
+  let html=`<div style="min-height:100vh;background:linear-gradient(160deg,#0f0f23 0%,#1a1a2e 40%,#16213e 100%);padding:20px;font-family:'Segoe UI',system-ui,sans-serif">
+    <div style="max-width:500px;margin:0 auto">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:24px">
+        <button onclick="state.view='list';state.cu=null;render()" style="background:rgba(255,255,255,0.1);border:none;border-radius:10px;width:38px;height:38px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:rgba(255,255,255,0.6);font-size:18px">←</button>
+        <div><div style="font-size:10px;color:#C9A96E;letter-spacing:2px;text-transform:uppercase;font-weight:300">MADALYON HUKUK</div><div style="font-size:16px;color:#E8E8F0;font-weight:700;margin-top:2px">🧮 Hesaplama Araçları</div></div>
+      </div>
+
+      <!-- Tabs -->
+      <div style="display:flex;gap:6px;margin-bottom:20px">
+        ${[{id:"smm",l:"SMM",i:"📄"},{id:"faiz",l:"Faiz",i:"💰"},{id:"vekalet",l:"Vekalet",i:"⚖️"}].map(tab=>`<button onclick="calcTab='${tab.id}';renderCalculator()" style="flex:1;padding:10px 8px;border-radius:12px;border:${calcTab===tab.id?"1.5px solid #C9A96E":"1.5px solid rgba(255,255,255,0.1)"};background:${calcTab===tab.id?"rgba(201,169,110,0.15)":"rgba(255,255,255,0.04)"};color:${calcTab===tab.id?"#C9A96E":"#A0A0B8"};font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">${tab.i} ${tab.l}</button>`).join("")}
+      </div>`;
+
+  // ── SMM ──
+  if(calcTab==="smm"){
+    html+=`<div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px">
+      <h3 style="color:#E8E8F0;font-size:16px;margin:0 0 16px">Serbest Meslek Makbuzu</h3>
+      <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:#A0A0B8;margin-bottom:5px">Stopaj</label><select onchange="smm.type=this.value" ${sel2}><option value="dahil"${smm.type==="dahil"?" selected":""}>Stopaj Dahil</option><option value="haric"${smm.type==="haric"?" selected":""}>Stopaj Hariç</option></select></div>
+      <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:#A0A0B8;margin-bottom:5px">KDV Oranı</label><select onchange="smm.kdv=this.value" ${sel2}><option value="haric"${smm.kdv==="haric"?" selected":""}>KDV Hariç</option><option value="1"${smm.kdv==="1"?" selected":""}>KDV Dahil (%1)</option><option value="10"${smm.kdv==="10"?" selected":""}>KDV Dahil (%10)</option><option value="20"${smm.kdv==="20"?" selected":""}>KDV Dahil (%20)</option></select></div>
+      <div style="margin-bottom:16px"><label style="display:block;font-size:12px;font-weight:600;color:#A0A0B8;margin-bottom:5px">Tutar (₺)</label><input type="number" value="${smm.tutar}" oninput="smm.tutar=this.value" placeholder="0.00" ${is2}></div>
+      <button onclick="calcSMM()" style="width:100%;padding:13px 0;border-radius:12px;border:none;background:linear-gradient(135deg,#C9A96E 0%,#B8944E 100%);color:#0f0f23;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Hesapla</button>
+      <div id="smmResult" style="margin-top:16px"></div>
+    </div>`;
+  }
+
+  // ── FAİZ ──
+  if(calcTab==="faiz"){
+    html+=`<div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px">
+      <h3 style="color:#E8E8F0;font-size:16px;margin:0 0 16px">Faiz Hesaplama</h3>
+      <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:#A0A0B8;margin-bottom:5px">Ana Para (₺)</label><input type="number" value="${faiz.anapara}" oninput="faiz.anapara=this.value" placeholder="0.00" ${is2}></div>
+      <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:#A0A0B8;margin-bottom:5px">Başlangıç Tarihi</label><input type="date" value="${faiz.baslangic}" onblur="faiz.baslangic=this.value" onchange="faiz.baslangic=this.value" ${is2}></div>
+      <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:#A0A0B8;margin-bottom:5px">Bitiş Tarihi</label><input type="date" value="${faiz.bitis}" onblur="faiz.bitis=this.value" onchange="faiz.bitis=this.value" ${is2}></div>
+      <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:#A0A0B8;margin-bottom:5px">Yıllık Faiz Oranı (%)</label><input type="number" value="${faiz.oran}" oninput="faiz.oran=this.value" placeholder="Ör: 24" ${is2}></div>
+      <div style="margin-bottom:16px"><label style="display:block;font-size:12px;font-weight:600;color:#A0A0B8;margin-bottom:5px">Faize Esas Gün</label><select onchange="faiz.gun=this.value" ${sel2}><option value="365"${faiz.gun==="365"?" selected":""}>365</option><option value="360"${faiz.gun==="360"?" selected":""}>360</option></select></div>
+      <button onclick="calcFaiz()" style="width:100%;padding:13px 0;border-radius:12px;border:none;background:linear-gradient(135deg,#C9A96E 0%,#B8944E 100%);color:#0f0f23;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Hesapla</button>
+      <div id="faizResult" style="margin-top:16px"></div>
+    </div>`;
+  }
+
+  // ── VEKALET ──
+  if(calcTab==="vekalet"){
+    html+=`<div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px">
+      <h3 style="color:#E8E8F0;font-size:16px;margin:0 0 16px">Vekalet Ücreti Hesaplama</h3>
+      <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:#A0A0B8;margin-bottom:5px">Konusu</label><select onchange="vek.konu=this.value" ${sel2}><option value="dava"${vek.konu==="dava"?" selected":""}>Konusu Para Olan Davalar</option><option value="icra"${vek.konu==="icra"?" selected":""}>İcra Takipleri</option></select></div>
+      <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:#A0A0B8;margin-bottom:5px">Mahkeme</label><select onchange="vek.mahkeme=this.value" ${sel2}><option value="icra"${vek.mahkeme==="icra"?" selected":""}>İcra Mahkemeleri</option><option value="sulh"${vek.mahkeme==="sulh"?" selected":""}>Sulh Mahkemeleri</option><option value="sulhceza"${vek.mahkeme==="sulhceza"?" selected":""}>Sulh Ceza/İnfaz Hakimlikleri</option><option value="asliye"${vek.mahkeme==="asliye"?" selected":""}>Asliye Mahkemeleri</option><option value="tuketici"${vek.mahkeme==="tuketici"?" selected":""}>Tüketici Mahkemeleri</option><option value="fikri"${vek.mahkeme==="fikri"?" selected":""}>Fikri ve Sınai Mahkemeleri</option><option value="idareD"${vek.mahkeme==="idareD"?" selected":""}>İdare ve Yargı Mah. (Duruşmalı)</option><option value="idareS"${vek.mahkeme==="idareS"?" selected":""}>İdare ve Yargı Mah. (Duruşmasız)</option></select></div>
+      <div style="margin-bottom:16px"><label style="display:block;font-size:12px;font-weight:600;color:#A0A0B8;margin-bottom:5px">Tutar (₺)</label><input type="number" value="${vek.tutar}" oninput="vek.tutar=this.value" placeholder="0.00" ${is2}></div>
+      <button onclick="calcVekalet()" style="width:100%;padding:13px 0;border-radius:12px;border:none;background:linear-gradient(135deg,#C9A96E 0%,#B8944E 100%);color:#0f0f23;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Hesapla</button>
+      <div id="vekaletResult" style="margin-top:16px"></div>
+    </div>`;
+  }
+
+  html+=`</div></div>`;
+  document.getElementById("app").innerHTML=html;
+}
+
+function resultBox(rows){
+  let h='<div style="background:rgba(201,169,110,0.1);border:1px solid rgba(201,169,110,0.25);border-radius:12px;padding:16px">';
+  rows.forEach(r=>{h+=`<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06)"><span style="font-size:13px;color:#A0A0B8">${r.l}</span><span style="font-size:14px;font-weight:700;color:${r.c||"#E8E8F0"}">${r.v}</span></div>`;});
+  h+='</div>';return h;
+}
+function fmt(n){return n.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2})+" ₺"}
+
+// SMM Hesaplama
+function calcSMM(){
+  const tutar=parseFloat(smm.tutar);if(!tutar||tutar<=0){document.getElementById("smmResult").innerHTML='<p style="color:#E74C3C;font-size:13px">Lütfen geçerli bir tutar girin.</p>';return;}
+  let brut,stopaj,kdvTutar,kdvOran=0,net;
+  if(smm.kdv!=="haric")kdvOran=parseFloat(smm.kdv);
+
+  if(smm.type==="dahil"){
+    // Stopaj dahil - tutar brüt+KDV toplamı
+    if(kdvOran>0){
+      brut=tutar/(1+kdvOran/100);
+      kdvTutar=tutar-brut;
+    } else {
+      brut=tutar;kdvTutar=0;
+    }
+    stopaj=brut*0.20;
+    net=brut-stopaj+kdvTutar;
+  } else {
+    // Stopaj hariç - tutar net ücret
+    brut=tutar/0.80;
+    stopaj=brut*0.20;
+    if(kdvOran>0){
+      kdvTutar=brut*kdvOran/100;
+    } else {
+      kdvTutar=0;
+    }
+    net=tutar+kdvTutar;
+  }
+  const toplam=brut+kdvTutar;
+
+  document.getElementById("smmResult").innerHTML=resultBox([
+    {l:"Brüt Ücret",v:fmt(brut)},
+    {l:"Stopaj (%20)",v:fmt(stopaj),c:"#E74C3C"},
+    {l:"KDV"+(kdvOran>0?" (%"+kdvOran+")":""),v:fmt(kdvTutar)},
+    {l:"Net Ücret",v:fmt(net),c:"#27AE60"},
+    {l:"Toplam Makbuz Tutarı",v:fmt(toplam),c:"#C9A96E"}
+  ]);
+}
+
+// Faiz Hesaplama
+function calcFaiz(){
+  const ap=parseFloat(faiz.anapara);const oran=parseFloat(faiz.oran);
+  if(!ap||!oran||!faiz.baslangic||!faiz.bitis){document.getElementById("faizResult").innerHTML='<p style="color:#E74C3C;font-size:13px">Lütfen tüm alanları doldurun.</p>';return;}
+  const d1=new Date(faiz.baslangic);const d2=new Date(faiz.bitis);
+  const gunSayisi=Math.ceil((d2-d1)/(1000*60*60*24));
+  if(gunSayisi<=0){document.getElementById("faizResult").innerHTML='<p style="color:#E74C3C;font-size:13px">Bitiş tarihi başlangıçtan sonra olmalı.</p>';return;}
+  const esasGun=parseInt(faiz.gun);
+  const faizTutar=ap*(oran/100)*(gunSayisi/esasGun);
+  const toplam=ap+faizTutar;
+
+  document.getElementById("faizResult").innerHTML=resultBox([
+    {l:"Ana Para",v:fmt(ap)},
+    {l:"Gün Sayısı",v:gunSayisi+" gün"},
+    {l:"Faiz Oranı",v:"%"+oran+" (yıllık)"},
+    {l:"Faiz Tutarı",v:fmt(faizTutar),c:"#E67E22"},
+    {l:"Toplam (Ana Para + Faiz)",v:fmt(toplam),c:"#C9A96E"}
+  ]);
+}
+
+// Vekalet Ücreti - 2025 AAÜT tarifesi (basitleştirilmiş)
+function calcVekalet(){
+  const tutar=parseFloat(vek.tutar);if(!tutar||tutar<=0){document.getElementById("vekaletResult").innerHTML='<p style="color:#E74C3C;font-size:13px">Lütfen geçerli bir tutar girin.</p>';return;}
+
+  // 2025 AAÜT maktu ücretler (yaklaşık)
+  const maktu={icra:6500,sulh:10200,sulhceza:8400,asliye:17900,tuketici:10200,fikri:24400,idareD:17900,idareS:10200};
+  const maktuUcret=maktu[vek.mahkeme]||17900;
+
+  let nisbiUcret=0;
+  if(vek.konu==="dava"){
+    // Konusu para olan davalar - nisbi oran
+    if(tutar<=100000){nisbiUcret=tutar*0.15;if(nisbiUcret<maktuUcret)nisbiUcret=maktuUcret;}
+    else if(tutar<=500000){nisbiUcret=15000+(tutar-100000)*0.13;}
+    else if(tutar<=1000000){nisbiUcret=67000+(tutar-500000)*0.10;}
+    else if(tutar<=5000000){nisbiUcret=117000+(tutar-1000000)*0.06;}
+    else{nisbiUcret=357000+(tutar-5000000)*0.04;}
+    if(nisbiUcret<maktuUcret)nisbiUcret=maktuUcret;
+  } else {
+    // İcra takipleri
+    if(tutar<=100000){nisbiUcret=tutar*0.12;if(nisbiUcret<maktuUcret)nisbiUcret=maktuUcret;}
+    else if(tutar<=500000){nisbiUcret=12000+(tutar-100000)*0.10;}
+    else if(tutar<=1000000){nisbiUcret=52000+(tutar-500000)*0.08;}
+    else{nisbiUcret=92000+(tutar-1000000)*0.05;}
+    if(nisbiUcret<maktuUcret)nisbiUcret=maktuUcret;
+  }
+
+  document.getElementById("vekaletResult").innerHTML=resultBox([
+    {l:"Dava/Takip Tutarı",v:fmt(tutar)},
+    {l:"Mahkeme",v:document.querySelector('[onchange="vek.mahkeme=this.value"]')?.selectedOptions[0]?.text||"-"},
+    {l:"Maktu Ücret",v:fmt(maktuUcret)},
+    {l:"Hesaplanan Vekalet Ücreti",v:fmt(nisbiUcret),c:"#C9A96E"}
+  ]);
+}
+
 // ── RENDER ──
 function render(){
   const t=T();
@@ -227,7 +390,11 @@ function render(){
           <span style="font-size:14px;font-weight:600">${m.name}</span>
         </button>`).join("")}
       </div>
-    </div>`;return;
+      <button onclick="state.view='calculator';render()" style="margin-top:24px;background:rgba(201,169,110,0.15);border:1px solid rgba(201,169,110,0.3);border-radius:14px;padding:14px 32px;cursor:pointer;color:#C9A96E;font-size:14px;font-weight:600;font-family:inherit;animation:slideUp 0.9s ease;display:flex;align-items:center;gap:8px">🧮 Hesaplama Araçları</button>
+    </div>`;
+    // Show calculator if selected
+    if(state.view==='calculator'){renderCalculator();return;}
+    return;
   }
 
   const me=tm(state.cu);
@@ -466,12 +633,12 @@ function renderModals(){
         <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:${t.ts};margin-bottom:5px">Öncelik</label><select onchange="fd.priority=this.value" style="width:100%;padding:0 14px;height:44px;border-radius:10px;border:1.5px solid ${t.ibd};font-size:14px;background:${t.ib};color:${t.tx};box-sizing:border-box;font-family:inherit">${PRIS.map(p=>`<option value="${p.id}"${fd.priority===p.id?" selected":""}>${p.l}</option>`).join("")}</select></div>
       </div>
       <div style="display:flex;flex-direction:column;gap:0px">
-        <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:${t.ts};margin-bottom:5px">Son Tarih</label><input type="date" value="${fd.deadline}" onchange="fd.deadline=this.value;render()" style="width:100%;padding:0 14px;height:44px;border-radius:10px;border:1.5px solid ${t.ibd};font-size:14px;background:${t.ib};color:${t.tx};box-sizing:border-box;font-family:inherit"></div>
+        <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:${t.ts};margin-bottom:5px">Son Tarih</label><input type="date" value="${fd.deadline}" onblur="fd.deadline=this.value;render()" onchange="fd.deadline=this.value" style="width:100%;padding:0 14px;height:44px;border-radius:10px;border:1.5px solid ${t.ibd};font-size:14px;background:${t.ib};color:${t.tx};box-sizing:border-box;font-family:inherit"></div>
         <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:${t.ts};margin-bottom:5px">Atanan Kişi</label><select onchange="fd.assignee=this.value" style="width:100%;padding:0 14px;height:44px;border-radius:10px;border:1.5px solid ${t.ibd};font-size:14px;background:${t.ib};color:${t.tx};box-sizing:border-box;font-family:inherit"><option value="">Seçiniz</option>${TEAM.map(m=>`<option value="${m.id}"${fd.assignee===m.id?" selected":""}>${m.name}</option>`).join("")}</select></div>
       </div>
       <div style="margin-bottom:14px;background:${t.ib};border-radius:12px;padding:14px;border:1px solid ${t.cb}">
         <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:${t.ts};margin-bottom:8px">📬 Tebligat Tarihi <span style="font-weight:400;color:${t.tm}">(opsiyonel)</span></label>
-        <input type="date" value="${fd.tebligatDate}" onchange="fd.tebligatDate=this.value;render()" style="width:100%;padding:0 14px;height:44px;border-radius:10px;border:1.5px solid ${t.ibd};font-size:14px;background:${t.ib==="FAFBFC"?"#fff":t.ib};color:${t.tx};box-sizing:border-box;font-family:inherit;margin-bottom:${fd.tebligatDate?"10px":"0"}">
+        <input type="date" value="${fd.tebligatDate}" onblur="fd.tebligatDate=this.value;render()" onchange="fd.tebligatDate=this.value" style="width:100%;padding:0 14px;height:44px;border-radius:10px;border:1.5px solid ${t.ibd};font-size:14px;background:${t.ib==="FAFBFC"?"#fff":t.ib};color:${t.tx};box-sizing:border-box;font-family:inherit;margin-bottom:${fd.tebligatDate?"10px":"0"}">
         ${fd.tebligatDate?`<div><div style="font-size:11px;color:${t.tm};margin-bottom:6px;margin-top:2px">Süre seçin:</div><div style="display:flex;gap:6px;flex-wrap:wrap">${[{l:"1 Hafta",d:7},{l:"2 Hafta",d:14},{l:"3 Hafta",d:21},{l:"30 Gün",d:30},{l:"45 Gün",d:45},{l:"60 Gün",d:60}].map(opt=>{const cd=new Date(fd.tebligatDate);cd.setDate(cd.getDate()+opt.d);const cs=cd.toISOString().split("T")[0];const sel=fd.deadline===cs;return`<button onclick="fd.deadline='${cs}';render()" style="padding:7px 12px;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;border:1.5px solid ${sel?t.gold:t.cb};background:${sel?t.gold+"20":"transparent"};color:${sel?t.gold:t.ts};font-family:inherit">${opt.l}<div style="font-size:9px;font-weight:400;color:${t.tm};margin-top:2px">${cd.toLocaleDateString("tr-TR",{day:"numeric",month:"short"})}</div></button>`;}).join("")}</div>${fd.deadline?`<div style="margin-top:8px;font-size:12px;color:${t.gold};font-weight:600">📅 Son tarih: ${fdt(fd.deadline)}</div>`:""}</div>`:""}
       </div>
       ${isEdit?`<div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:${t.ts};margin-bottom:5px">Durum</label><div style="display:flex;gap:8px">${STS.map(s=>`<button onclick="fd.status='${s.id}';render()" style="flex:1;padding:10px 6px;border-radius:10px;border:2px solid ${fd.status===s.id?s.c:t.cb};background:${fd.status===s.id?s.bg:t.card};color:${fd.status===s.id?s.c:t.tm};font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">${s.i} ${s.l}</button>`).join("")}</div></div>`:""}
@@ -489,8 +656,8 @@ function renderModals(){
       <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:${t.ts};margin-bottom:5px">Mahkeme / Birim *</label><input value="${hf.court}" oninput="hf.court=this.value" placeholder="Ör: Ankara 5. Asliye Hukuk Mah." style="width:100%;padding:0 14px;height:44px;border-radius:10px;border:1.5px solid ${t.ibd};font-size:14px;background:${t.ib};color:${t.tx};box-sizing:border-box;font-family:inherit"></div>
       <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:${t.ts};margin-bottom:5px">Dosya No</label><input value="${hf.fileNo}" oninput="hf.fileNo=this.value" placeholder="Ör: 2024/1234 E." style="width:100%;padding:0 14px;height:44px;border-radius:10px;border:1.5px solid ${t.ibd};font-size:14px;background:${t.ib};color:${t.tx};box-sizing:border-box;font-family:inherit"></div>
       <div style="display:flex;flex-direction:column;gap:0px">
-        <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:${t.ts};margin-bottom:5px">Tarih *</label><input type="date" value="${hf.date}" onchange="hf.date=this.value" style="width:100%;padding:0 14px;height:44px;border-radius:10px;border:1.5px solid ${t.ibd};font-size:14px;background:${t.ib};color:${t.tx};box-sizing:border-box;font-family:inherit"></div>
-        <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:${t.ts};margin-bottom:5px">Saat</label><input type="time" value="${hf.time}" onchange="hf.time=this.value" style="width:100%;padding:0 14px;height:44px;border-radius:10px;border:1.5px solid ${t.ibd};font-size:14px;background:${t.ib};color:${t.tx};box-sizing:border-box;font-family:inherit"></div>
+        <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:${t.ts};margin-bottom:5px">Tarih *</label><input type="date" value="${hf.date}" onblur="hf.date=this.value" onchange="hf.date=this.value" style="width:100%;padding:0 14px;height:44px;border-radius:10px;border:1.5px solid ${t.ibd};font-size:14px;background:${t.ib};color:${t.tx};box-sizing:border-box;font-family:inherit"></div>
+        <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:${t.ts};margin-bottom:5px">Saat</label><input type="time" value="${hf.time}" onblur="hf.time=this.value" onchange="hf.time=this.value" style="width:100%;padding:0 14px;height:44px;border-radius:10px;border:1.5px solid ${t.ibd};font-size:14px;background:${t.ib};color:${t.tx};box-sizing:border-box;font-family:inherit"></div>
       </div>
       <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:${t.ts};margin-bottom:5px">Avukat</label><select onchange="hf.assignee=this.value" style="width:100%;padding:0 14px;height:44px;border-radius:10px;border:1.5px solid ${t.ibd};font-size:14px;background:${t.ib};color:${t.tx};box-sizing:border-box;font-family:inherit"><option value="">Seçiniz</option>${TEAM.map(m=>`<option value="${m.id}"${hf.assignee===m.id?" selected":""}>${m.name}</option>`).join("")}</select></div>
       <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:${t.ts};margin-bottom:5px">Notlar</label><textarea oninput="hf.notes=this.value" placeholder="Ek bilgiler..." rows="2" style="width:100%;padding:11px 14px;border-radius:10px;border:1.5px solid ${t.ibd};font-size:14px;background:${t.ib};color:${t.tx};box-sizing:border-box;font-family:inherit;resize:vertical">${hf.notes}</textarea></div>
