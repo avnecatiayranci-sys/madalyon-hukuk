@@ -338,34 +338,64 @@ function calcFaiz(){
 function calcVekalet(){
   const tutar=parseFloat(vek.tutar);if(!tutar||tutar<=0){document.getElementById("vekaletResult").innerHTML='<p style="color:#E74C3C;font-size:13px">Lütfen geçerli bir tutar girin.</p>';return;}
 
-  // 2025 AAÜT maktu ücretler (yaklaşık)
-  const maktu={icra:6500,sulh:10200,sulhceza:8400,asliye:17900,tuketici:10200,fikri:24400,idareD:17900,idareS:10200};
-  const maktuUcret=maktu[vek.mahkeme]||17900;
+  // 2025-2026 AAÜT maktu ücretler
+  const maktu={icra:9000,sulh:13500,sulhceza:11000,asliye:30000,tuketici:13500,fikri:30000,idareD:30000,idareS:20000};
+  const maktuUcret=maktu[vek.mahkeme]||30000;
 
-  let nisbiUcret=0;
-  if(vek.konu==="dava"){
-    // Konusu para olan davalar - nisbi oran
-    if(tutar<=100000){nisbiUcret=tutar*0.15;if(nisbiUcret<maktuUcret)nisbiUcret=maktuUcret;}
-    else if(tutar<=500000){nisbiUcret=15000+(tutar-100000)*0.13;}
-    else if(tutar<=1000000){nisbiUcret=67000+(tutar-500000)*0.10;}
-    else if(tutar<=5000000){nisbiUcret=117000+(tutar-1000000)*0.06;}
-    else{nisbiUcret=357000+(tutar-5000000)*0.04;}
-    if(nisbiUcret<maktuUcret)nisbiUcret=maktuUcret;
-  } else {
-    // İcra takipleri
-    if(tutar<=100000){nisbiUcret=tutar*0.12;if(nisbiUcret<maktuUcret)nisbiUcret=maktuUcret;}
-    else if(tutar<=500000){nisbiUcret=12000+(tutar-100000)*0.10;}
-    else if(tutar<=1000000){nisbiUcret=52000+(tutar-500000)*0.08;}
-    else{nisbiUcret=92000+(tutar-1000000)*0.05;}
-    if(nisbiUcret<maktuUcret)nisbiUcret=maktuUcret;
+  // 2025-2026 AAÜT Üçüncü Kısım - Nisbi tarife dilimleri
+  // Konusu para olan davalar
+  const davaDilimleri=[
+    {limit:400000, oran:0.16},
+    {limit:400000, oran:0.15},
+    {limit:800000, oran:0.14},
+    {limit:800000, oran:0.13},
+    {limit:1200000, oran:0.11},
+    {limit:1600000, oran:0.08},
+    {limit:2000000, oran:0.05},
+    {limit:2400000, oran:0.03},
+    {limit:2800000, oran:0.02},
+    {limit:Infinity, oran:0.01}
+  ];
+
+  // İcra takipleri
+  const icraDilimleri=[
+    {limit:600000, oran:0.16},
+    {limit:600000, oran:0.15},
+    {limit:1200000, oran:0.14},
+    {limit:1200000, oran:0.13},
+    {limit:1800000, oran:0.11},
+    {limit:2400000, oran:0.08},
+    {limit:3000000, oran:0.05},
+    {limit:3600000, oran:0.03},
+    {limit:4200000, oran:0.02},
+    {limit:Infinity, oran:0.01}
+  ];
+
+  const dilimler = vek.konu==="dava" ? davaDilimleri : icraDilimleri;
+  let kalan=tutar;
+  let toplam=0;
+  let detay=[];
+  let dilimBaslangic=0;
+
+  for(let i=0;i<dilimler.length&&kalan>0;i++){
+    const d=dilimler[i];
+    const dilimTutar=Math.min(kalan,d.limit);
+    const dilimUcret=dilimTutar*d.oran;
+    toplam+=dilimUcret;
+    if(dilimTutar>0){
+      detay.push({l:(i===0?"İlk ":"Sonraki ")+fmt(d.limit===Infinity?kalan:d.limit).replace(" ₺","")+" TL için %"+Math.round(d.oran*100),v:fmt(dilimUcret)});
+    }
+    kalan-=dilimTutar;
   }
 
-  document.getElementById("vekaletResult").innerHTML=resultBox([
-    {l:"Dava/Takip Tutarı",v:fmt(tutar)},
-    {l:"Mahkeme",v:document.querySelector('[onchange="vek.mahkeme=this.value"]')?.selectedOptions[0]?.text||"-"},
-    {l:"Maktu Ücret",v:fmt(maktuUcret)},
-    {l:"Hesaplanan Vekalet Ücreti",v:fmt(nisbiUcret),c:"#C9A96E"}
-  ]);
+  if(toplam<maktuUcret)toplam=maktuUcret;
+
+  let rows=[{l:"Dava/Takip Tutarı",v:fmt(tutar)}];
+  rows=rows.concat(detay);
+  rows.push({l:"Maktu Asgari Ücret",v:fmt(maktuUcret)});
+  rows.push({l:fmt(tutar).replace(" ₺","")+" TL için TOPLAM",v:fmt(toplam),c:"#C9A96E"});
+
+  document.getElementById("vekaletResult").innerHTML=resultBox(rows);
 }
 
 // ── RENDER ──
