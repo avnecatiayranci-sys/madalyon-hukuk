@@ -209,8 +209,9 @@ function togComplete(tid){
     return;
   }
 
-  // Geri al (tamamlandı veya onay bekliyordan geri)
+  // Geri al: sadece yönetici geri alabilir, çalışan onay bekliyor durumunu geri alamaz
   if(done||pendingApproval){
+    if(isEmployee(state.cu)&&pendingApproval){return;} // çalışan onay bekliyoru geri alamaz
     t.status="devam";
     t.updatedAt=new Date().toISOString();t.updatedBy=state.cu;
     t.completedAt=null;t.completedBy=null;t.approvedAt=null;t.approvedBy=null;
@@ -243,8 +244,12 @@ function rejectTask(tid){
 
 function delTask(tid){
   const t=state.tasks.find(x=>x.id===tid);
+  if(!t)return;
+  // Çalışan onay bekleyen görevi silemez
+  if(isEmployee(state.cu)&&t.status==="onay_bekliyor"){return;}
+  // Çalışan sadece kendi görevlerini silebilir, ama onay bekleyeni değil
   state.tasks=state.tasks.filter(x=>x.id!==tid);
-  state.logs.unshift({id:gid(),taskId:tid,taskTitle:t?t.title:"",action:"sildi",userId:state.cu,timestamp:new Date().toISOString()});
+  state.logs.unshift({id:gid(),taskId:tid,taskTitle:t.title,action:"sildi",userId:state.cu,timestamp:new Date().toISOString()});
   saveData();modals.showDet=null;render();
 }
 
@@ -708,9 +713,9 @@ function renderModals(){
       </div>`:""}
       <div style="display:flex;gap:10px">
         ${!pendingAppr&&!done?`<button onclick="togComplete('${task.id}');modals.showDet=null;render()" style="flex:1;padding:12px 0;border-radius:10px;border:none;font-size:13px;font-weight:700;cursor:pointer;background:#27AE6018;color:#27AE60;font-family:inherit">Tamamla</button>`:""}
-        ${done||pendingAppr?`<button onclick="togComplete('${task.id}');modals.showDet=null;render()" style="flex:1;padding:12px 0;border-radius:10px;border:none;font-size:13px;font-weight:700;cursor:pointer;background:#E67E2218;color:#E67E22;font-family:inherit">Geri Al</button>`:""}
-        <button onclick="fd={title:'${task.title.replace(/'/g,"\\'")}',description:'${(task.description||"").replace(/'/g,"\\'")}',priority:'${task.priority}',deadline:'${task.deadline||""}',assignee:'${task.assignee||""}',category:'${task.category||"dava"}',status:'${task.status}',tebligatDate:'${task.tebligatDate||""}'};modals.editTask='${task.id}';modals.showForm=true;modals.showDet=null;render()" style="flex:1;padding:12px 0;border-radius:10px;border:none;font-size:13px;font-weight:700;cursor:pointer;background:#2E86C118;color:#2E86C1;font-family:inherit">Düzenle</button>
-        <button onclick="delTask('${task.id}')" style="padding:12px 18px;border-radius:10px;border:none;font-size:13px;font-weight:700;cursor:pointer;background:#C0392B18;color:#C0392B;font-family:inherit">Sil</button>
+        ${done||(pendingAppr&&isManager(state.cu))?`<button onclick="togComplete('${task.id}');modals.showDet=null;render()" style="flex:1;padding:12px 0;border-radius:10px;border:none;font-size:13px;font-weight:700;cursor:pointer;background:#E67E2218;color:#E67E22;font-family:inherit">Geri Al</button>`:""}
+        ${!(pendingAppr&&isEmployee(state.cu))?`<button onclick="fd={title:'${task.title.replace(/'/g,"\'")}',description:'${(task.description||"").replace(/'/g,"\'")}',priority:'${task.priority}',deadline:'${task.deadline||""}',assignee:'${task.assignee||""}',category:'${task.category||"dava"}',status:'${task.status}',tebligatDate:'${task.tebligatDate||""}'}; modals.editTask='${task.id}';modals.showForm=true;modals.showDet=null;render()" style="flex:1;padding:12px 0;border-radius:10px;border:none;font-size:13px;font-weight:700;cursor:pointer;background:#2E86C118;color:#2E86C1;font-family:inherit">Düzenle</button>`:""}
+        ${!(pendingAppr&&isEmployee(state.cu))?`<button onclick="delTask('${task.id}')" style="padding:12px 18px;border-radius:10px;border:none;font-size:13px;font-weight:700;cursor:pointer;background:#C0392B18;color:#C0392B;font-family:inherit">Sil</button>`:""}
       </div>
     `);
   }
