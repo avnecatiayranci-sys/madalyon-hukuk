@@ -22,6 +22,8 @@ body.dark{background:#0d0d1a}
 @keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.6}}
 @keyframes bellShake{0%,100%{transform:rotate(0)}20%{transform:rotate(-15deg)}40%{transform:rotate(15deg)}60%{transform:rotate(-10deg)}80%{transform:rotate(10deg)}}
+@keyframes notifSlideIn{from{opacity:0;transform:translateY(-20px)}to{opacity:1;transform:translateY(0)}}
+@keyframes notifSlideOut{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-20px)}}
 input:focus,select:focus,textarea:focus{outline:none;border-color:#C9A96E !important;box-shadow:0 0 0 3px rgba(201,169,110,0.13)}
 button{-webkit-tap-highlight-color:transparent}
 ::-webkit-scrollbar{width:0;height:0}
@@ -73,8 +75,8 @@ const QLINKS=[
 ];
 
 // State
-let state={tasks:[],logs:[],hearings:[],cu:null,theme:"light",view:"list",filter:"all",fAsn:"all",fCat:"all",sortBy:"deadline",sq:"",showFlt:false};
-let modals={showForm:false,editTask:null,showDet:null,showHForm:false,editH:null,dayTasks:null,dayH:null,showApproval:null};
+let state={tasks:[],logs:[],hearings:[],notifs:[],cu:null,theme:"light",view:"list",filter:"all",fAsn:"all",fCat:"all",sortBy:"deadline",sq:"",showFlt:false};
+let modals={showForm:false,editTask:null,showDet:null,showHForm:false,editH:null,dayTasks:null,dayH:null,showApproval:null,showNotifs:false};
 let fd={title:"",description:"",priority:"normal",deadline:"",assignee:"",category:"dava",status:"bekliyor",tebligatDate:""};
 let hf={court:"",fileNo:"",date:"",time:"09:00",assignee:"",notes:""};
 let calMonth=new Date();
@@ -108,9 +110,30 @@ function getPendingApprovals(){
 }
 
 // Firebase sync
+const notifRef=db.ref("madalyon-notifs");
+
 function saveData(){
   dataRef.set({tasks:state.tasks,logs:state.logs,hearings:state.hearings});
 }
+
+function addNotif(toUserId,taskId,taskTitle,fromUserId){
+  const nid=gid();
+  notifRef.child(nid).set({
+    id:nid,toUserId,taskId,taskTitle,fromUserId,
+    read:false,createdAt:new Date().toISOString()
+  }).then(()=>console.log("Bildirim gönderildi:",taskTitle,"→",toUserId))
+    .catch(e=>console.error("Bildirim hatası:",e));
+}
+
+function markNotifRead(nid){
+  notifRef.child(nid).update({read:true});
+}
+
+function markAllNotifsRead(userId){
+  state.notifs.filter(n=>n.toUserId===userId&&!n.read)
+    .forEach(n=>notifRef.child(n.id).update({read:true}));
+}
+
 dataRef.on("value",snap=>{
   const d=snap.val();
   if(d){
@@ -119,6 +142,15 @@ dataRef.on("value",snap=>{
     state.hearings=d.hearings||[];
     render();
   }
+});
+
+// Bildirimler ayrı dinleniyor — render() tetiklemez, sadece badge günceller
+notifRef.on("value",snap=>{
+  const d=snap.val();
+  state.notifs=d?Object.values(d):[];
+  console.log("Notifler güncellendi:",state.notifs.length,"adet");
+  // render çalışıyorsa badge setTimeout ile güncelle
+  requestAnimationFrame(()=>renderNotifBadge());
 });
 
 // ICS export
@@ -169,14 +201,25 @@ function addTask(){
   state.tasks.push({id,...fd,createdAt:new Date().toISOString(),createdBy:state.cu,updatedAt:new Date().toISOString(),updatedBy:state.cu,completedAt:null,completedBy:null,approvedAt:null,approvedBy:null});
   state.logs.unshift({id:gid(),taskId:id,taskTitle:fd.title,action:"oluşturdu",userId:state.cu,timestamp:new Date().toISOString()});
   if(state.logs.length>200)state.logs=state.logs.slice(0,200);
+  // Atanan kişiye bildirim gönder (kendine atıyorsa bildirim yok)
+  if(fd.assignee&&fd.assignee!==state.cu){
+    addNotif(fd.assignee,id,fd.title,state.cu);
+  }
   saveData();modals.showForm=false;render();
 }
 
 function updateTask(){
   if(!fd.title.trim())return;
   const idx=state.tasks.findIndex(t=>t.id===modals.editTask);
-  if(idx>=0){Object.assign(state.tasks[idx],fd,{updatedAt:new Date().toISOString(),updatedBy:state.cu});
-  state.logs.unshift({id:gid(),taskId:modals.editTask,taskTitle:fd.title,action:"düzenledi",userId:state.cu,timestamp:new Date().toISOString()});}
+  if(idx>=0){
+    const prevAssignee=state.tasks[idx].assignee;
+    Object.assign(state.tasks[idx],fd,{updatedAt:new Date().toISOString(),updatedBy:state.cu});
+    state.logs.unshift({id:gid(),taskId:modals.editTask,taskTitle:fd.title,action:"düzenledi",userId:state.cu,timestamp:new Date().toISOString()});
+    // Atanan kişi değiştiyse yeni kişiye bildirim gönder
+    if(fd.assignee&&fd.assignee!==state.cu&&fd.assignee!==prevAssignee){
+      addNotif(fd.assignee,modals.editTask,fd.title,state.cu);
+    }
+  }
   saveData();modals.showForm=false;modals.editTask=null;render();
 }
 
@@ -229,6 +272,16 @@ function approveTask(tid){
   t.approvedAt=new Date().toISOString();t.approvedBy=state.cu;
   state.logs.unshift({id:gid(),taskId:tid,taskTitle:t.title,action:"onayladı",userId:state.cu,timestamp:new Date().toISOString()});
   saveData();modals.showDet=null;modals.showApproval=null;render();
+}
+
+// Bildirim badge render (full re-render olmadan)
+function renderNotifBadge(){
+  if(!state.cu)return;
+  const unread=state.notifs.filter(n=>n.toUserId===state.cu&&!n.read);
+  const badge=document.getElementById("notifBadge");
+  const btn=document.getElementById("notifBtn");
+  if(badge){badge.textContent=unread.length;badge.style.display=unread.length>0?"flex":"none";}
+  if(btn){btn.style.animation=unread.length>0?"bellShake 2s ease-in-out infinite":"none";}
 }
 
 // Yönetici reddi
@@ -445,6 +498,7 @@ function render(){
       <div style="display:flex;align-items:center;gap:10px"><span style="font-size:22px">⚖️</span><div><div style="font-size:10px;color:${t.gold};letter-spacing:2px;text-transform:uppercase;font-weight:300">MADALYON HUKUK</div><div style="display:flex;align-items:center;gap:6px;margin-top:1px"><span style="font-size:10px;color:rgba(255,255,255,0.4)">Görev Takip</span><span style="font-size:9px;color:${me.role==="manager"?"#C9A96E":"#A0A0B8"};background:${me.role==="manager"?"rgba(201,169,110,0.2)":"rgba(255,255,255,0.1)"};padding:1px 7px;border-radius:10px">${me.role==="manager"?"Yönetici":"Çalışan"}</span></div></div></div>
       <div style="display:flex;align-items:center;gap:8px">
         ${isManager(state.cu)&&pendingApprovals.length>0?`<button onclick="modals.showApproval='list';render()" style="position:relative;background:rgba(142,68,173,0.25);border:1px solid rgba(142,68,173,0.4);border-radius:8px;width:38px;height:38px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;animation:bellShake 2s ease-in-out infinite">🔔<span style="position:absolute;top:-4px;right:-4px;background:#E74C3C;color:#fff;font-size:9px;font-weight:700;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center">${pendingApprovals.length}</span></button>`:""}
+        <button id="notifBtn" onclick="modals.showNotifs=!modals.showNotifs;render()" style="position:relative;background:rgba(255,255,255,0.1);border:none;border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px"><span>🔔</span><span id="notifBadge" style="display:none;position:absolute;top:-4px;right:-4px;background:#E74C3C;color:#fff;font-size:9px;font-weight:700;width:16px;height:16px;border-radius:50%;align-items:center;justify-content:center"></span></button>
         <button onclick="state.theme=state.theme==='light'?'dark':'light';render()" style="background:rgba(255,255,255,0.1);border:none;border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:rgba(255,255,255,0.6);font-size:14px">${state.theme==="light"?"🌙":"☀️"}</button>
         <div style="width:32px;height:32px;border-radius:50%;background:${me.col};color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700">${me.ini}</div>
         <button onclick="state.cu=null;render()" style="background:rgba(255,255,255,0.1);border:none;color:rgba(255,255,255,0.5);padding:5px 10px;border-radius:8px;font-size:10px;cursor:pointer;font-family:inherit">Çıkış</button>
@@ -625,6 +679,8 @@ function render(){
 
   document.getElementById("app").innerHTML=html;
   renderModals();
+  // Badge'i render sonra güncelle
+  setTimeout(()=>renderNotifBadge(),0);
 }
 
 function openNewTask(){fd={title:"",description:"",priority:"normal",deadline:"",assignee:"",category:"dava",status:"bekliyor",tebligatDate:""};modals.editTask=null;modals.showForm=true;render();}
@@ -660,6 +716,36 @@ function renderMiniCal(items,dateKey,monthObj,allowEmpty){
 
 function renderModals(){
   const t=T();let mhtml="";
+
+  // ── BİLDİRİM PANELİ ──
+  if(modals.showNotifs&&state.cu){
+    const myNotifs=state.notifs.filter(n=>n.toUserId===state.cu).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)).slice(0,20);
+    const unreadCount=myNotifs.filter(n=>!n.read).length;
+    mhtml+=renderModalWrap(
+      `Bildirimler${unreadCount>0?" ("+unreadCount+" yeni)":""}`,
+      "modals.showNotifs=false;render()",
+      (myNotifs.length===0
+        ? `<div style="text-align:center;padding:40px;color:${t.tm}"><div style="font-size:36px;margin-bottom:10px">🔔</div><p style="font-size:14px">Henüz bildirim yok</p></div>`
+        : `<div style="margin-bottom:14px;display:flex;justify-content:flex-end">${unreadCount>0?`<button onclick="markAllNotifsRead('${state.cu}');modals.showNotifs=false;render()" style="background:${t.fb};border:1px solid ${t.cb};border-radius:8px;padding:6px 12px;font-size:12px;color:${t.ts};cursor:pointer;font-family:inherit">Tümünü okundu işaretle</button>`:""}
+        </div>`
+        + myNotifs.map(n=>{
+          const from=tm(n.fromUserId);
+          const task=state.tasks.find(x=>x.id===n.taskId);
+          const pr=task?PRIS.find(p=>p.id===task.priority):null;
+          return`<div onclick="${n.read?"":"markNotifRead('"+n.id+"');"} ${task?`modals.showDet=state.tasks.find(x=>x.id==='${n.taskId}');modals.showNotifs=false;render()`:"modals.showNotifs=false;render()"}" style="display:flex;gap:12px;align-items:flex-start;padding:12px;border-radius:12px;margin-bottom:8px;cursor:pointer;background:${n.read?t.card:t.theme==="dark"?"rgba(201,169,110,0.08)":"#FFF9F0"};border:1px solid ${n.read?t.cb:"#C9A96E40"}">
+            <div style="width:36px;height:36px;border-radius:50%;background:${from?from.col:"#888"};color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0">${from?from.ini:"?"}</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13px;font-weight:${n.read?400:700};color:${t.tx}">${from?from.name:"Biri"} sana yeni bir görev atadı</div>
+              <div style="font-size:12px;color:${t.gold};margin-top:3px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${n.taskTitle}</div>
+              ${pr?`<span style="font-size:10px;color:${pr.c};font-weight:600">${pr.l} öncelik</span>`:""}
+              <div style="font-size:10px;color:${t.tm};margin-top:4px">${fdt(n.createdAt)}</div>
+            </div>
+            ${!n.read?`<div style="width:8px;height:8px;border-radius:50%;background:#C9A96E;flex-shrink:0;margin-top:4px"></div>`:""}
+          </div>`;
+        }).join("")
+      )
+    );
+  }
 
   // ── ONAY LİSTESİ MODALI (yönetici için) ──
   if(modals.showApproval==="list"&&isManager(state.cu)){
