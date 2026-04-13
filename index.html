@@ -95,13 +95,15 @@ function T(){return state.theme==="dark"?{bg:"#0d0d1a",card:"#1a1a2e",cb:"#2a2a4
 function tm(id){return TEAM.find(m=>m.id===id)}
 function isManager(uid){const m=tm(uid);return m&&m.role==="manager"}
 function isEmployee(uid){const m=tm(uid);return m&&m.role==="employee"}
+function canApproveTask(task){if(!isManager(state.cu))return false;if(!task.createdBy)return true;return task.createdBy===state.cu;}
 
 // Onay bekleyen görevler (giriş yapan yönetici için)
 function getPendingApprovals(){
+  // createdBy yoksa (eski görev) tüm yöneticiler görebilir
   if(!state.cu||!isManager(state.cu))return[];
   return state.tasks.filter(t=>
     t.status==="onay_bekliyor" &&
-    t.createdBy===state.cu
+    (!t.createdBy || t.createdBy===state.cu)
   );
 }
 
@@ -504,7 +506,7 @@ function render(){
           // Çalışan geri alabilir, yönetici (atayan) onaylayabilir
           if(isEmployee(state.cu)&&task.assignee===state.cu){
             checkBtn=`<button onclick="event.stopPropagation();togComplete('${task.id}')" title="Geri Al" style="width:26px;height:26px;border-radius:8px;flex-shrink:0;border:none;background:#8E44AD22;cursor:pointer;display:flex;align-items:center;justify-content:center;margin-top:1px;font-size:14px">🔔</button>`;
-          } else if(isManager(state.cu)&&task.createdBy===state.cu){
+          } else if(canApproveTask(task)){
             checkBtn=`<button onclick="event.stopPropagation();approveTask('${task.id}')" title="Onayla" style="width:26px;height:26px;border-radius:8px;flex-shrink:0;border:none;background:#27AE6022;cursor:pointer;display:flex;align-items:center;justify-content:center;margin-top:1px;font-size:16px">✓</button>`;
           } else {
             checkBtn=`<div style="width:26px;height:26px;border-radius:8px;flex-shrink:0;background:#8E44AD22;display:flex;align-items:center;justify-content:center;margin-top:1px;font-size:14px">🔔</div>`;
@@ -686,7 +688,7 @@ function renderModals(){
   if(modals.showDet){
     const task=modals.showDet;const pr=PRIS.find(p=>p.id===task.priority);const st=STS.find(s=>s.id===task.status);const cat=CATS.find(c=>c.id===task.category);const m=tm(task.assignee);const cr=tm(task.createdBy);const days=drem(task.deadline);const done=task.status==="tamamlandi";const pendingAppr=task.status==="onay_bekliyor";
     const tl=state.logs.filter(l=>l.taskId===task.id).slice(0,10);
-    const canApprove=pendingAppr&&isManager(state.cu)&&task.createdBy===state.cu;
+    const canApprove=pendingAppr&&canApproveTask(task);
     mhtml+=renderModalWrap("Görev Detayı","modals.showDet=null;render()",`
       ${done?`<div style="background:#27AE6012;border:1px solid #27AE6030;border-radius:12px;padding:14px 16px;margin-bottom:16px;text-align:center"><div style="font-size:24px;margin-bottom:4px">✅</div><div style="font-weight:700;color:#27AE60;font-size:15px">TAMAMLANDI</div>${task.approvedBy?`<div style="font-size:12px;color:#52BE80;margin-top:4px">${(tm(task.approvedBy)||{}).name||""} onayladı - ${fdt(task.approvedAt)}</div>`:""}</div>`:""}
       ${pendingAppr?`<div style="background:#8E44AD12;border:1px solid #8E44AD30;border-radius:12px;padding:14px 16px;margin-bottom:16px;text-align:center"><div style="font-size:24px;margin-bottom:4px">🔔</div><div style="font-weight:700;color:#8E44AD;font-size:15px">ONAY BEKLİYOR</div><div style="font-size:12px;color:#A569BD;margin-top:4px">${m?m.name:"-"} tamamladı${task.completedAt?", "+fdt(task.completedAt):""}. ${cr?cr.name:"Yönetici"} onayı bekleniyor.</div></div>`:""}
