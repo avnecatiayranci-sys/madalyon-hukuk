@@ -75,10 +75,11 @@ const QLINKS=[
 ];
 
 // State
-let state={tasks:[],logs:[],hearings:[],notifs:[],cu:null,theme:"light",view:"list",filter:"all",fAsn:"all",fCat:"all",sortBy:"deadline",sq:"",showFlt:false};
-let modals={showForm:false,editTask:null,showDet:null,showHForm:false,editH:null,dayTasks:null,dayH:null,showApproval:null,showNotifs:false};
+let state={tasks:[],logs:[],hearings:[],notifs:[],icraKayitlar:[],cu:null,theme:"light",view:"list",filter:"all",fAsn:"all",fCat:"all",sortBy:"deadline",sq:"",showFlt:false,icraSq:""};
+let modals={showForm:false,editTask:null,showDet:null,showHForm:false,editH:null,dayTasks:null,dayH:null,showApproval:null,showNotifs:false,showIcraForm:false,editIcra:null,icraDosyaDetay:null};
 let fd={title:"",description:"",priority:"normal",deadline:"",assignee:"",category:"dava",status:"bekliyor",tebligatDate:""};
 let hf={court:"",fileNo:"",date:"",time:"09:00",assignee:"",notes:""};
+let icf={dosyaNo:"",tur:"islem",aciklama:"",tutar:"",tarih:"",saat:""};
 let calMonth=new Date();
 let hCalMonth=new Date();
 let pdfMonth=new Date().getFullYear()+"-"+String(new Date().getMonth()+1).padStart(2,"0");
@@ -113,7 +114,7 @@ function getPendingApprovals(){
 const notifRef=db.ref("madalyon-notifs");
 
 function saveData(){
-  dataRef.set({tasks:state.tasks,logs:state.logs,hearings:state.hearings});
+  dataRef.set({tasks:state.tasks,logs:state.logs,hearings:state.hearings,icraKayitlar:state.icraKayitlar});
 }
 
 function addNotif(toUserId,taskId,taskTitle,fromUserId){
@@ -140,6 +141,7 @@ dataRef.on("value",snap=>{
     state.tasks=d.tasks||[];
     state.logs=d.logs||[];
     state.hearings=d.hearings||[];
+    state.icraKayitlar=d.icraKayitlar||[];
     render();
   }
 });
@@ -321,6 +323,50 @@ function updateHearing(){
 function delHearing(hid){
   state.hearings=state.hearings.filter(h=>h.id!==hid);
   saveData();modals.dayH=null;render();
+}
+
+// İcra Takip CRUD (görev atamasından tamamen bağımsız — dosya bazlı işlem/masraf günlüğü)
+function nowDateStr(){const n=new Date();return n.getFullYear()+"-"+String(n.getMonth()+1).padStart(2,"0")+"-"+String(n.getDate()).padStart(2,"0");}
+function nowTimeStr(){const n=new Date();return String(n.getHours()).padStart(2,"0")+":"+String(n.getMinutes()).padStart(2,"0");}
+
+function openNewIcra(dosyaNo){
+  icf={dosyaNo:dosyaNo||"",tur:"islem",aciklama:"",tutar:"",tarih:nowDateStr(),saat:nowTimeStr()};
+  modals.editIcra=null;modals.icraDosyaDetay=null;modals.showIcraForm=true;render();
+}
+
+function addIcraKayit(){
+  if(!icf.dosyaNo.trim()||!icf.aciklama.trim())return;
+  if(icf.tur==="masraf"&&(!icf.tutar||parseFloat(icf.tutar)<=0))return;
+  const id=gid();
+  const tarihSaat=new Date((icf.tarih||nowDateStr())+"T"+(icf.saat||"00:00")).toISOString();
+  state.icraKayitlar.push({id,dosyaNo:icf.dosyaNo.trim(),tur:icf.tur,aciklama:icf.aciklama.trim(),tutar:icf.tur==="masraf"?icf.tutar:"",tarihSaat,userId:state.cu,createdAt:new Date().toISOString()});
+  saveData();modals.showIcraForm=false;render();
+}
+
+function updateIcraKayit(){
+  if(!icf.dosyaNo.trim()||!icf.aciklama.trim())return;
+  if(icf.tur==="masraf"&&(!icf.tutar||parseFloat(icf.tutar)<=0))return;
+  const idx=state.icraKayitlar.findIndex(k=>k.id===modals.editIcra);
+  if(idx>=0){
+    const tarihSaat=new Date((icf.tarih||nowDateStr())+"T"+(icf.saat||"00:00")).toISOString();
+    Object.assign(state.icraKayitlar[idx],{dosyaNo:icf.dosyaNo.trim(),tur:icf.tur,aciklama:icf.aciklama.trim(),tutar:icf.tur==="masraf"?icf.tutar:"",tarihSaat});
+  }
+  saveData();modals.showIcraForm=false;modals.editIcra=null;render();
+}
+
+function editIcraKayit(kid){
+  const k=state.icraKayitlar.find(x=>x.id===kid);if(!k)return;
+  const d=new Date(k.tarihSaat);
+  icf={dosyaNo:k.dosyaNo,tur:k.tur,aciklama:k.aciklama,tutar:k.tutar||"",tarih:d.toISOString().split("T")[0],saat:String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0")};
+  modals.editIcra=kid;modals.icraDosyaDetay=null;modals.showIcraForm=true;render();
+}
+
+function delIcraKayit(kid){
+  const k=state.icraKayitlar.find(x=>x.id===kid);
+  if(!k)return;
+  if(isEmployee(state.cu)&&k.userId!==state.cu)return; // çalışan sadece kendi kaydını silebilir
+  state.icraKayitlar=state.icraKayitlar.filter(x=>x.id!==kid);
+  saveData();render();
 }
 
 // Filter & Sort
@@ -516,7 +562,7 @@ function render(){
 
   <!-- View Tabs -->
   <div style="display:flex;gap:0;padding:12px 16px 0;border-bottom:1px solid ${t.cb}">
-    ${["list:Görevler:📋","hearings:Duruşmalar:⚖️","calendar:Takvim:📅","history:Geçmiş:🕐"].map(v=>{const[id,l,i]=v.split(":");return`<button onclick="state.view='${id}';render()" style="display:flex;align-items:center;gap:5px;padding:10px 12px;font-size:12px;font-weight:600;border:none;cursor:pointer;background:transparent;color:${state.view===id?t.gold:t.tm};border-bottom:${state.view===id?"2px solid "+t.gold:"2px solid transparent"};font-family:inherit">${i} ${l}</button>`;}).join("")}
+    ${["list:Görevler:📋","hearings:Duruşmalar:⚖️","icra:İcra Takip:💰","calendar:Takvim:📅","history:Geçmiş:🕐"].map(v=>{const[id,l,i]=v.split(":");return`<button onclick="state.view='${id}';render()" style="display:flex;align-items:center;gap:5px;padding:10px 12px;font-size:12px;font-weight:600;border:none;cursor:pointer;background:transparent;color:${state.view===id?t.gold:t.tm};border-bottom:${state.view===id?"2px solid "+t.gold:"2px solid transparent"};font-family:inherit">${i} ${l}</button>`;}).join("")}
     <div style="flex:1"></div>
     <button onclick="genWeekly()" style="display:flex;align-items:center;gap:4px;padding:10px 8px;font-size:10px;font-weight:600;border:none;cursor:pointer;background:transparent;color:${t.tm};font-family:inherit">📊 Haftalık</button>
   </div>`;
@@ -644,6 +690,44 @@ function render(){
     html+=`</div></div>`;
   }
 
+  // ── İCRA TAKİP VIEW ──
+  if(state.view==="icra"){
+    const grouped={};
+    state.icraKayitlar.forEach(k=>{if(!grouped[k.dosyaNo])grouped[k.dosyaNo]=[];grouped[k.dosyaNo].push(k);});
+    let dosyalar=Object.keys(grouped).sort((a,b)=>{
+      const la=Math.max(...grouped[a].map(x=>new Date(x.tarihSaat).getTime()));
+      const lb=Math.max(...grouped[b].map(x=>new Date(x.tarihSaat).getTime()));
+      return lb-la;
+    });
+    const sq=(state.icraSq||"").toLowerCase();
+    if(sq)dosyalar=dosyalar.filter(d=>d.toLowerCase().includes(sq));
+
+    html+=`<div style="padding:14px 16px 6px">
+      <div style="position:relative"><input value="${state.icraSq}" oninput="state.icraSq=this.value;render()" placeholder="Dosya no / borçlu ara..." style="width:100%;padding:10px 14px 10px 36px;border-radius:12px;border:1.5px solid ${t.cb};font-size:13px;background:${t.card};box-sizing:border-box;color:${t.tx};font-family:inherit"><span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:14px;opacity:0.35">🔍</span></div>
+    </div>
+    <div style="padding:4px 16px">`;
+
+    if(dosyalar.length===0){
+      html+=`<div style="text-align:center;padding:60px 20px;color:${t.tm}"><div style="font-size:44px;margin-bottom:12px">💰</div><p style="font-size:15px;font-weight:600;color:${t.ts}">Henüz icra takip kaydı yok</p><p style="font-size:12px;margin-top:6px">Sağ alttaki + butonuyla ilk kaydı ekleyebilirsin</p></div>`;
+    } else {
+      dosyalar.forEach((dosyaNo,idx)=>{
+        const items=grouped[dosyaNo].sort((a,b)=>new Date(b.tarihSaat)-new Date(a.tarihSaat));
+        const masrafToplam=items.filter(x=>x.tur==="masraf").reduce((s,x)=>s+(parseFloat(x.tutar)||0),0);
+        const islemSayisi=items.filter(x=>x.tur==="islem").length;
+        const last=items[0];
+        html+=`<div onclick="modals.icraDosyaDetay='${dosyaNo.replace(/'/g,"\\'")}';render()" style="background:${t.card};border-radius:14px;padding:14px 16px;margin-bottom:10px;cursor:pointer;border:1.5px solid ${t.cb};animation:slideUp ${0.15+idx*0.04}s ease">
+          <div style="font-size:14px;font-weight:700;color:${t.tx}">${dosyaNo}</div>
+          <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+            <span style="font-size:11px;color:${t.ts};background:${t.fb};padding:2px 8px;border-radius:8px">📋 ${islemSayisi} işlem</span>
+            ${masrafToplam>0?`<span style="font-size:11px;color:#C0392B;background:#C0392B15;padding:2px 8px;border-radius:8px;font-weight:600">💰 ${fmt(masrafToplam)}</span>`:""}
+          </div>
+          <div style="font-size:10px;color:${t.tm};margin-top:8px">Son kayıt: ${(tm(last.userId)||{}).name||"-"} • ${fdt(last.tarihSaat)} ${ftm(last.tarihSaat)}</div>
+        </div>`;
+      });
+    }
+    html+=`</div>`;
+  }
+
   // ── CALENDAR VIEW ──
   if(state.view==="calendar"){
     html+=renderMiniCal(state.tasks,"deadline",calMonth,false);
@@ -674,7 +758,7 @@ function render(){
   }
 
   // FAB
-  html+=`<button onclick="${state.view==="hearings"?"openNewHearing()":"openNewTask()"}" style="position:fixed;bottom:28px;right:20px;width:58px;height:58px;border-radius:50%;border:none;cursor:pointer;background:${t.fab};color:${state.theme==="dark"?"#0d0d1a":"#fff"};font-size:28px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 24px rgba(0,0,0,0.3);z-index:100">+</button>`;
+  html+=`<button onclick="${state.view==="hearings"?"openNewHearing()":state.view==="icra"?"openNewIcra()":"openNewTask()"}" style="position:fixed;bottom:28px;right:20px;width:58px;height:58px;border-radius:50%;border:none;cursor:pointer;background:${t.fab};color:${state.theme==="dark"?"#0d0d1a":"#fff"};font-size:28px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 24px rgba(0,0,0,0.3);z-index:100">+</button>`;
   html+=`<div style="height:100px"></div>`;
 
   document.getElementById("app").innerHTML=html;
@@ -842,6 +926,63 @@ function renderModals(){
       <div style="display:flex;gap:10px;margin-top:20px">
         <button onclick="modals.showHForm=false;modals.editH=null;render()" style="flex:1;padding:13px 0;border-radius:12px;border:none;background:${t.fb};color:${t.ts};font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">İptal</button>
         <button onclick="${isEdit?"updateHearing()":"addHearing()"}" style="flex:2;padding:13px 0;border-radius:12px;border:none;background:${t.fab};color:${state.theme==="dark"?"#0d0d1a":"#fff"};font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">${isEdit?"Kaydet":"Duruşma Ekle"}</button>
+      </div>
+    `);
+  }
+
+  // İcra Takip - Dosya Detay Modal
+  if(modals.icraDosyaDetay){
+    const dosyaNo=modals.icraDosyaDetay;
+    const items=state.icraKayitlar.filter(k=>k.dosyaNo===dosyaNo).sort((a,b)=>new Date(b.tarihSaat)-new Date(a.tarihSaat));
+    const masrafToplam=items.filter(x=>x.tur==="masraf").reduce((s,x)=>s+(parseFloat(x.tutar)||0),0);
+    const islemSayisi=items.filter(x=>x.tur==="islem").length;
+    mhtml+=renderModalWrap(dosyaNo,"modals.icraDosyaDetay=null;render()",`
+      <div style="display:flex;gap:10px;margin-bottom:16px">
+        <div style="flex:1;background:${t.ib};border-radius:10px;padding:10px 14px;text-align:center"><div style="font-size:18px;font-weight:700;color:${t.tx}">${islemSayisi}</div><div style="font-size:10px;color:${t.tm}">İşlem</div></div>
+        <div style="flex:1;background:${t.ib};border-radius:10px;padding:10px 14px;text-align:center"><div style="font-size:18px;font-weight:700;color:#C0392B">${fmt(masrafToplam)}</div><div style="font-size:10px;color:${t.tm}">Toplam Masraf</div></div>
+      </div>
+      <button onclick="openNewIcra('${dosyaNo.replace(/'/g,"\\'")}')" style="width:100%;padding:12px 0;border-radius:12px;border:none;background:${t.gold}18;color:${t.gold};font-size:13px;font-weight:700;cursor:pointer;margin-bottom:16px;font-family:inherit">+ Yeni Kayıt Ekle</button>
+      ${items.length===0?`<div style="text-align:center;padding:30px;color:${t.tm}">Henüz kayıt yok</div>`:items.map(k=>{
+        const m=tm(k.userId);const isMasraf=k.tur==="masraf";
+        const canDel=isManager(state.cu)||k.userId===state.cu;
+        return`<div style="background:${t.ib};border-radius:12px;padding:12px 14px;margin-bottom:10px;border-left:3px solid ${isMasraf?"#C0392B":"#2E86C1"}">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+            <div style="flex:1">
+              <span style="font-size:10px;font-weight:700;color:${isMasraf?"#C0392B":"#2E86C1"};background:${isMasraf?"#C0392B15":"#2E86C115"};padding:2px 8px;border-radius:8px">${isMasraf?"💰 MASRAF":"📋 İŞLEM"}</span>
+              <div style="font-size:13px;color:${t.tx};margin-top:6px;line-height:1.5">${k.aciklama}</div>
+              ${isMasraf?`<div style="font-size:15px;font-weight:700;color:#C0392B;margin-top:6px">${fmt(parseFloat(k.tutar)||0)}</div>`:""}
+            </div>
+            <div style="display:flex;gap:4px;flex-shrink:0">
+              <button onclick="editIcraKayit('${k.id}')" style="background:${t.fb};border:none;border-radius:8px;padding:5px 7px;cursor:pointer;color:${t.ts};font-size:11px">✏</button>
+              ${canDel?`<button onclick="delIcraKayit('${k.id}')" style="background:#C0392B18;border:none;border-radius:8px;padding:5px 7px;cursor:pointer;color:#C0392B;font-size:11px">🗑</button>`:""}
+            </div>
+          </div>
+          <div style="font-size:10px;color:${t.tm};margin-top:8px;padding-top:8px;border-top:1px solid ${t.cb}">${m?m.name:"?"} tarafından eklendi • ${fdt(k.tarihSaat)} ${ftm(k.tarihSaat)}</div>
+        </div>`;
+      }).join("")}
+    `);
+  }
+
+  // İcra Takip - Kayıt Formu Modal
+  if(modals.showIcraForm){
+    const isEdit=!!modals.editIcra;
+    const dosyaSuggestions=[...new Set(state.icraKayitlar.map(k=>k.dosyaNo))];
+    mhtml+=renderModalWrap(isEdit?"Kaydı Düzenle":"Yeni İcra Kaydı","modals.showIcraForm=false;modals.editIcra=null;render()",`
+      <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:${t.ts};margin-bottom:5px">Dosya No / Borçlu Adı *</label><input list="icraDosyaList" value="${icf.dosyaNo}" oninput="icf.dosyaNo=this.value" placeholder="Ör: 2024/1234 E. - Ahmet Yılmaz" style="width:100%;padding:0 14px;height:44px;border-radius:10px;border:1.5px solid ${t.ibd};font-size:14px;background:${t.ib};color:${t.tx};box-sizing:border-box;font-family:inherit"><datalist id="icraDosyaList">${dosyaSuggestions.map(d=>`<option value="${d.replace(/"/g,"&quot;")}">`).join("")}</datalist></div>
+      <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:${t.ts};margin-bottom:5px">Kayıt Türü</label><div style="display:flex;gap:8px">
+        <button onclick="icf.tur='islem';render()" style="flex:1;padding:12px 6px;border-radius:10px;border:2px solid ${icf.tur==="islem"?"#2E86C1":t.cb};background:${icf.tur==="islem"?"#EBF5FB":t.card};color:${icf.tur==="islem"?"#2E86C1":t.tm};font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">📋 İşlem</button>
+        <button onclick="icf.tur='masraf';render()" style="flex:1;padding:12px 6px;border-radius:10px;border:2px solid ${icf.tur==="masraf"?"#C0392B":t.cb};background:${icf.tur==="masraf"?"#FDEDEC":t.card};color:${icf.tur==="masraf"?"#C0392B":t.tm};font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">💰 Masraf</button>
+      </div></div>
+      <div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:${t.ts};margin-bottom:5px">Açıklama *</label><textarea oninput="icf.aciklama=this.value" placeholder="${icf.tur==="masraf"?"Ör: Harç masrafı, tebligat gideri...":"Ör: Haciz talebi gönderildi, borçluya tebligat çıkarıldı..."}" rows="3" style="width:100%;padding:11px 14px;border-radius:10px;border:1.5px solid ${t.ibd};font-size:14px;background:${t.ib};color:${t.tx};box-sizing:border-box;font-family:inherit;resize:vertical">${icf.aciklama}</textarea></div>
+      ${icf.tur==="masraf"?`<div style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:${t.ts};margin-bottom:5px">Tutar (₺) *</label><input type="number" value="${icf.tutar}" oninput="icf.tutar=this.value" placeholder="0.00" style="width:100%;padding:0 14px;height:44px;border-radius:10px;border:1.5px solid ${t.ibd};font-size:14px;background:${t.ib};color:${t.tx};box-sizing:border-box;font-family:inherit"></div>`:""}
+      <div style="display:flex;gap:10px;margin-bottom:14px">
+        <div style="flex:1"><label style="display:block;font-size:12px;font-weight:600;color:${t.ts};margin-bottom:5px">Tarih</label><input type="date" value="${icf.tarih}" onblur="icf.tarih=this.value" onchange="icf.tarih=this.value" style="width:100%;padding:0 14px;height:44px;border-radius:10px;border:1.5px solid ${t.ibd};font-size:14px;background:${t.ib};color:${t.tx};box-sizing:border-box;font-family:inherit"></div>
+        <div style="flex:1"><label style="display:block;font-size:12px;font-weight:600;color:${t.ts};margin-bottom:5px">Saat</label><input type="time" value="${icf.saat}" onblur="icf.saat=this.value" onchange="icf.saat=this.value" style="width:100%;padding:0 14px;height:44px;border-radius:10px;border:1.5px solid ${t.ibd};font-size:14px;background:${t.ib};color:${t.tx};box-sizing:border-box;font-family:inherit"></div>
+      </div>
+      <div style="background:${t.ib};border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:11px;color:${t.tm}">Ekleyen: <b style="color:${t.tx}">${(tm(state.cu)||{}).name||"-"}</b> ${isEdit?"":"(otomatik, giriş yapan kişi)"}</div>
+      <div style="display:flex;gap:10px">
+        <button onclick="modals.showIcraForm=false;modals.editIcra=null;render()" style="flex:1;padding:13px 0;border-radius:12px;border:none;background:${t.fb};color:${t.ts};font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">İptal</button>
+        <button onclick="${isEdit?"updateIcraKayit()":"addIcraKayit()"}" style="flex:2;padding:13px 0;border-radius:12px;border:none;background:${t.fab};color:${state.theme==="dark"?"#0d0d1a":"#fff"};font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Kaydet</button>
       </div>
     `);
   }
