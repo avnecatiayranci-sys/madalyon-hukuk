@@ -326,7 +326,7 @@ function delHearing(hid){
 // Filter & Sort
 function getFiltered(){
   return state.tasks.filter(t=>{
-    if(state.filter==="active"&&(t.status==="tamamlandi"))return false;
+    if(state.filter!=="completed"&&t.status==="tamamlandi")return false;
     if(state.filter==="completed"&&t.status!=="tamamlandi")return false;
     if(state.filter==="overdue"&&(t.status==="tamamlandi"||t.status==="onay_bekliyor"||!t.deadline||drem(t.deadline)>=0))return false;
     if(state.filter==="mine"&&t.assignee!==state.cu)return false;
